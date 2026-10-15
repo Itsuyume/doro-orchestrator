@@ -10,6 +10,36 @@ from doro.infrastructure.process import execute
 
 
 class ProcessTests(unittest.TestCase):
+    def test_callback_failure_terminates_the_running_process(self) -> None:
+        seen: list[int] = []
+        def reject(chunk: bytes) -> None:
+            seen.append(int(chunk.strip()))
+            raise DoroError("Reject forbidden streaming content")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(DoroError, "forbidden"):
+                execute([sys.executable, "-c", "import os,time; print(os.getpid(),flush=True); time.sleep(30)"],
+                        "", Path(tmp), 5, 1000, reject)
+        self.assertEqual(len(seen), 1)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(seen[0], 0)
+
+    def test_stdout_callback_runs_before_process_completion(self) -> None:
+        seen: list[bytes] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = root / "observed"
+            code = ("from pathlib import Path; import sys,time; print('streaming',flush=True); "
+                    f"p=Path({str(marker)!r}); "
+                    "deadline=time.monotonic()+2\n"
+                    "while not p.exists() and time.monotonic()<deadline: time.sleep(.01)\n"
+                    "sys.exit(0 if p.exists() else 5)")
+            def receive(chunk: bytes) -> None:
+                seen.append(chunk)
+                marker.write_text("received before exit")
+            result = execute([sys.executable, "-c", code], "", root, 5, 1000, receive)
+            self.assertEqual(result.returncode, 0)
+            self.assertIn(b"streaming", b"".join(seen))
+
     def test_prompt_uses_stdin_and_environment_does_not_forward_secrets(self) -> None:
         code = "import os,sys; print(sys.stdin.read()); print('secret', os.getenv('DORO_TEST_SECRET'))"
         os.environ["DORO_TEST_SECRET"] = "NEVER_FORWARD_THIS"

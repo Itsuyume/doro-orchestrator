@@ -8,8 +8,8 @@ from socketserver import BaseServer
 import time
 from urllib.parse import urlsplit
 
+from doro.application.status import status_view
 from doro.domain.models import Config, DoroError
-from doro.domain.progress import progress
 from doro.infrastructure.storage import LocalStore
 
 ASSETS = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
@@ -68,7 +68,7 @@ class ProgressHandler(BaseHTTPRequestHandler):
         if not secrets.compare_digest(self.headers.get("Authorization", ""), "Bearer " + self.token):
             self.send_body(b"Unauthorized", "text/plain", 401)
             return
-        state = progress(self.config, self.store.load(self.session_id))
+        state = status_view(self.config, self.store.load(self.session_id))
         self.send_body(json.dumps(state, ensure_ascii=False).encode(), "application/json")
 
 

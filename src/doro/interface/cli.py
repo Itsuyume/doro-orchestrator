@@ -7,7 +7,8 @@ import sys
 import tomllib
 from uuid import uuid4
 
-from doro.application.orchestrator import Orchestrator, public_error, validate_session
+from doro.application.failures import public_error
+from doro.application.orchestrator import Orchestrator, validate_session
 from doro.domain.models import Config, DoroError, Session
 from doro.domain.policy import ensure_public, plan_turns
 from doro.infrastructure.config import load_config

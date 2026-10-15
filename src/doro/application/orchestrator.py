@@ -1,17 +1,10 @@
-import re
 from typing import Callable
 
+from doro.application.failures import public_error
 from doro.application.ports import Runner, Store
 from doro.application.turn_executor import TurnExecutor
 from doro.domain.models import Config, DoroError, PlannedTurn, Session
-from doro.domain.policy import SENSITIVE, ensure_public, plan_turns
-
-
-def public_error(error: BaseException) -> str:
-    text = str(error)
-    for pattern in SENSITIVE:
-        text = re.sub(pattern, "[redacted]", text)
-    return text[:2000]
+from doro.domain.policy import ensure_public, plan_turns
 
 
 def validate_session(config: Config, session: Session) -> tuple[PlannedTurn, ...]:

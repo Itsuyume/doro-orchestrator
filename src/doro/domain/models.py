@@ -77,6 +77,25 @@ class Turn:
 
 
 @dataclass
+class Checkpoint:
+    id: str
+    kind: str
+    summary: str
+    resume_status: str
+    decision: str = "pending"
+
+
+@dataclass
+class Exchange:
+    provider: str
+    phase: str
+    input: str
+    output: str = ""
+    status: str = "running"
+    error: str = ""
+
+
+@dataclass
 class Session:
     id: str
     task: Task
@@ -92,3 +111,5 @@ class Session:
     status: str = "ready"
     error: str = ""
     mode: str = "cli"
+    checkpoints: list[Checkpoint] = field(default_factory=list)
+    exchanges: list[Exchange] = field(default_factory=list)

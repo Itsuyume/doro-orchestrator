@@ -38,6 +38,7 @@ class WorkBridgeTests(unittest.TestCase):
             store = LocalStore(Path(tmp))
             bridge = WorkBridge(self.config, store, runner, lambda _: None)
             session = bridge.start(self.task, "WORK_DRAFT_public")
+            bridge.decide(session.id, session.checkpoints[-1].id, "approve")
             reviewed = bridge.review(session.id)
             self.assertEqual(reviewed.status, "awaiting_work")
             self.assertIn("WORK_DRAFT_public", runner.prompts[0][1])
@@ -58,6 +59,7 @@ class WorkBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             bridge = WorkBridge(self.config, LocalStore(Path(tmp)), runner, lambda _: None)
             session = bridge.start(self.task, "Public draft")
+            bridge.decide(session.id, session.checkpoints[-1].id, "approve")
             with self.assertRaises(DoroError):
                 bridge.finish(session.id, "Premature final")
             bridge.review(session.id)
@@ -85,6 +87,7 @@ class WorkBridgeTests(unittest.TestCase):
             store = LocalStore(Path(tmp))
             bridge = WorkBridge(self.config, store, runner, lambda _: None)
             session = bridge.start(self.task, "Public Work draft")
+            bridge.decide(session.id, session.checkpoints[-1].id, "approve")
             with self.assertRaises(DoroError):
                 bridge.review(session.id)
             failed = store.load(session.id)
@@ -99,6 +102,8 @@ class WorkBridgeTests(unittest.TestCase):
     def test_old_cli_sessions_remain_readable_without_rewriting_history(self) -> None:
         original = asdict(new_session(self.config))
         original.pop("mode")
+        original.pop("checkpoints")
+        original.pop("exchanges")
         decoded = decode_session(json.dumps(original))
         self.assertEqual(decoded.mode, "cli")
         self.assertEqual(decoded.participants, ("codex", "claude"))
@@ -110,3 +115,18 @@ class WorkBridgeTests(unittest.TestCase):
             bridge = WorkBridge(config, LocalStore(Path(tmp)), ExternalRunner(), lambda _: None)
             with self.assertRaisesRegex(DoroError, "AGY"):
                 bridge.start(self.task, "Public draft")
+
+    def test_pre_approval_work_record_is_readable_but_not_implicitly_authorized(self) -> None:
+        runner = ExternalRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalStore(Path(tmp))
+            bridge = WorkBridge(self.config, store, runner, lambda _: None)
+            original = asdict(bridge.start(self.task, "Public old draft"))
+            original.pop("checkpoints")
+            original.pop("exchanges")
+            original["status"] = "awaiting_claude"
+            previous = decode_session(json.dumps(original))
+            store.save(previous)
+            with self.assertRaisesRegex(DoroError, "approval"):
+                bridge.review(previous.id)
+            self.assertEqual(runner.prompts, [])

@@ -1,4 +1,5 @@
 from contextlib import AbstractContextManager
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -6,7 +7,8 @@ from doro.domain.models import Config, Reply, Session
 
 
 class Runner(Protocol):
-    def call(self, name: str, prompt: str, cwd: Path, timeout: float) -> Reply: ...
+    def call(self, name: str, prompt: str, cwd: Path, timeout: float,
+             on_text: Callable[[str], None] | None = None) -> Reply: ...
 
 
 class Store(Protocol):

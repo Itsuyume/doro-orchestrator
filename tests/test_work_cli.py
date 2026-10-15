@@ -28,9 +28,10 @@ class WorkCliTests(unittest.TestCase):
             session = WorkBridge(config, store, ExternalRunner(), lambda _: None).start(task, "Public draft")
             code = "from pathlib import Path; from doro.interface.cli import main; raise SystemExit(main(Path(__import__('sys').argv.pop(1))))"
             env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "PATH": ""}
-            result = subprocess.run([sys.executable, "-c", code, str(root), "work", "review", session.id],
-                                    env=env, capture_output=True, text=True, timeout=10)
-            self.assertEqual(result.returncode, 1)
-            self.assertIn("requires --send", result.stderr)
+            for flags, expected in (([], "requires --send"), (["--send"], "approval")):
+                result = subprocess.run([sys.executable, "-c", code, str(root), "work", "review", session.id, *flags],
+                                        env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(expected, result.stderr)
             self.assertEqual(store.load(session.id).calls, {})
-            self.assertEqual(store.load(session.id).status, "awaiting_claude")
+            self.assertEqual(store.load(session.id).status, "awaiting_approval")

@@ -1,4 +1,5 @@
 from dataclasses import replace
+from collections.abc import Callable
 from pathlib import Path
 import tempfile
 import unittest
@@ -25,12 +26,15 @@ class ExternalRunner:
         self.fail_once = fail_once
         self.sensitive = sensitive
 
-    def call(self, name: str, prompt: str, cwd: Path, timeout: float) -> Reply:
+    def call(self, name: str, prompt: str, cwd: Path, timeout: float,
+             on_text: Callable[[str], None] | None = None) -> Reply:
         self.prompts.append((name, prompt))
         if self.fail_once and name == "claude":
             self.fail_once = False
             raise DoroError("external authentication failure")
         text = "sk-" + "x" * 30 if self.sensitive else f"{name} public reply {len(self.prompts)}"
+        if on_text is not None and name == "claude":
+            on_text(text)
         return Reply(text, 20, 0.01 if name == "claude" else None, str(uuid4()))
 
 

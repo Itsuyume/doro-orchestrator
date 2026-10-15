@@ -20,5 +20,9 @@ def progress(config: Config, session: Session) -> dict[str, object]:
             "claude_call_limit": config.providers["claude"].max_calls,
             "tokens_reported": session.tokens_used, "cost_usd_reported": session.reported_usd,
             "agy_enabled": config.providers["agy"].enabled,
-            "error": session.error, "task": session.task.message,
-            "turns": [{"speaker": t.provider, "phase": t.phase, "text": t.text} for t in session.turns]}
+            "error": session.error, "task": session.task.message, "context": session.task.context,
+            "turns": [{"speaker": t.provider, "phase": t.phase, "text": t.text} for t in session.turns],
+            "checkpoints": [{"id": g.id, "kind": g.kind, "summary": g.summary, "decision": g.decision}
+                            for g in session.checkpoints],
+            "exchanges": [{"speaker": x.provider, "phase": x.phase, "input": x.input, "output": x.output,
+                           "status": x.status, "error": x.error} for x in session.exchanges]}

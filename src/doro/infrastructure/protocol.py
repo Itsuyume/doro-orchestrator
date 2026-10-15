@@ -32,7 +32,18 @@ def parse_codex(output: str) -> Reply:
 
 
 def parse_claude(output: str) -> Reply:
-    data = mapping(json.loads(output), "Claude result")
+    events: list[dict[str, object]] = []
+    decoder, offset = json.JSONDecoder(), 0
+    while offset < len(output):
+        if output[offset].isspace():
+            offset += 1
+            continue
+        value, offset = decoder.raw_decode(output, offset)
+        events.append(mapping(value, "Claude event"))
+    results = [event for event in events if event.get("type") == "result" or "is_error" in event]
+    if len(results) != 1:
+        raise DoroError("Claude stream needs exactly one final result")
+    data = results[0]
     if data.get("is_error") is not False or data.get("subtype") != "success":
         raise DoroError("Claude failed: " + str(data.get("result", data.get("subtype")))[:1000])
     usage = mapping(data.get("usage"), "usage")

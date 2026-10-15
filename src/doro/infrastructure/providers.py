@@ -1,4 +1,5 @@
 from pathlib import Path
+from collections.abc import Callable
 import json
 import os
 import shutil
@@ -6,6 +7,7 @@ import shutil
 from doro.domain.models import Config, DoroError, Reply
 from doro.infrastructure.process import execute
 from doro.infrastructure.protocol import decode_reply
+from doro.infrastructure.streaming import ClaudeTextStream
 
 CODEX_SETTINGS = (
     'approval_policy="never"', 'web_search="disabled"', 'project_doc_max_bytes=0',
@@ -32,7 +34,8 @@ def build_command(config: Config, name: str) -> list[str]:
             argv += ["-c", f'model_reasoning_effort="{provider.effort}"']
         argv += ["-"]
     elif name == "claude":
-        argv += ["--print", "--output-format", "json", "--safe-mode", "--restricted", "--tools", "",
+        argv += ["--print", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+                 "--safe-mode", "--restricted", "--tools", "",
                  "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                  "--permission-mode", "dontAsk", "--permission-prompts", "none",
                  "--settings", '{"disableAllHooks":true}', "--disable-slash-commands",
@@ -53,7 +56,8 @@ class CliRunner:
     def __init__(self, config: Config) -> None:
         self.config = config
 
-    def call(self, name: str, prompt: str, cwd: Path, timeout: float) -> Reply:
+    def call(self, name: str, prompt: str, cwd: Path, timeout: float,
+             on_text: Callable[[str], None] | None = None) -> Reply:
         argv = build_command(self.config, name)  # Disabled gate precedes even PATH lookup.
         if not shutil.which(argv[0]):
             raise DoroError(f"{name} CLI is not installed on PATH")
@@ -63,5 +67,9 @@ class CliRunner:
             with os.fdopen(descriptor, "w") as output:
                 output.write(self.config.roles[name])
             argv += ["-c", "model_instructions_file=" + json.dumps(str(instructions))]
-        result = execute(argv, prompt, cwd, timeout, self.config.limits.max_process_bytes)
+        stream = ClaudeTextStream(on_text) if name == "claude" and on_text is not None else None
+        result = execute(argv, prompt, cwd, timeout, self.config.limits.max_process_bytes,
+                         stream.feed if stream is not None else None)
+        if stream is not None:
+            stream.finish()
         return decode_reply(name, result)

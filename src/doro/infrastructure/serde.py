@@ -1,7 +1,7 @@
 from dataclasses import asdict
 import json
 
-from doro.domain.models import DoroError, Session, Turn
+from doro.domain.models import Checkpoint, DoroError, Exchange, Session, Turn
 from doro.domain.validation import integer, keys, mapping, number, parse_task, string, strings
 
 
@@ -21,8 +21,10 @@ def decode_turn(value: object) -> Turn:
 
 def decode_session(raw: str) -> Session:
     data = mapping(json.loads(raw), "session")
-    if set(data) == set(Session.__dataclass_fields__) - {"mode"}:
-        data["mode"] = "cli"  # Read the original version-1 CLI record without rewriting it.
+    missing = set(Session.__dataclass_fields__) - set(data)
+    if missing in ({"mode", "checkpoints", "exchanges"}, {"checkpoints", "exchanges"}):
+        data.setdefault("mode", "cli")
+        data["checkpoints"], data["exchanges"] = [], []  # Explicit v1/v2 record migration; no implicit approval.
     keys(data, set(Session.__dataclass_fields__), "session")
     turns = data["turns"]
     if not isinstance(turns, list):
@@ -41,10 +43,36 @@ def decode_session(raw: str) -> Session:
         number(data["seconds_used"], "seconds_used"),
         string(data["status"], "status"), string(data["error"], "error", empty=True),
         string(data["mode"], "mode"),
+        [decode_checkpoint(item) for item in record_list(data["checkpoints"], "checkpoints")],
+        [decode_exchange(item) for item in record_list(data["exchanges"], "exchanges")],
     )
     if session.mode not in {"cli", "work"}:
         raise DoroError("Invalid stored session mode")
     if session.status not in {"ready", "running", "failed", "interrupted", "completed",
-                              "awaiting_claude", "awaiting_work"}:
+                              "awaiting_claude", "awaiting_work", "awaiting_approval", "awaiting_direction"}:
         raise DoroError("Invalid stored session status")
     return session
+
+
+def record_list(value: object, name: str) -> list[object]:
+    if not isinstance(value, list):
+        raise DoroError(f"Invalid stored {name} list")
+    return list(value)
+
+
+def decode_checkpoint(value: object) -> Checkpoint:
+    data = mapping(value, "checkpoint")
+    keys(data, set(Checkpoint.__dataclass_fields__), "checkpoint")
+    fields = {key: string(value, key) for key, value in data.items()}
+    if fields["kind"] not in {"start", "branch", "apply"} or fields["decision"] not in {"pending", "approve", "reject"}:
+        raise DoroError("Invalid stored checkpoint")
+    return Checkpoint(**fields)
+
+
+def decode_exchange(value: object) -> Exchange:
+    data = mapping(value, "exchange")
+    keys(data, set(Exchange.__dataclass_fields__), "exchange")
+    fields = {key: string(value, key, empty=key in {"output", "error"}) for key, value in data.items()}
+    if fields["status"] not in {"running", "completed", "failed", "interrupted"}:
+        raise DoroError("Invalid stored exchange status")
+    return Exchange(**fields)
