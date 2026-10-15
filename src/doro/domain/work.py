@@ -28,7 +28,7 @@ def validate_work_history(session: Session) -> None:
         previous = session.turns[index - 1]
         if turn.provider == "claude" and previous.provider == "work":
             expected = "review" if reviews == 0 else "recheck"
-            if turn.phase != expected or reviews >= session.rounds:
+            if turn.phase != expected or (not session.retry_until_quota and reviews >= session.rounds):
                 raise DoroError("Unexpected Claude phase or review limit exceeded")
             reviews += 1
             continue

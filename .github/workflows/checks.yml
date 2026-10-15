@@ -15,3 +15,18 @@ jobs:
       - run: mypy
       - run: python tools/check_architecture.py
       - run: PYTHONPATH=src python -m unittest discover -s tests -v
+  native-chat:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/*.swift -o /tmp/doro-chat-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/PetAnimation.swift tests/native/MotionChecks.swift -o /tmp/doro-motion-check
+      - run: /tmp/doro-motion-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/ChatModels.swift native/DoroChat/StackCatalog.swift tests/native/StackChecks.swift -o /tmp/doro-stack-check
+      - run: /tmp/doro-stack-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/ChatModels.swift native/DoroChat/ApprovalPresentation.swift tests/native/ApprovalChecks.swift -o /tmp/doro-approval-check
+      - run: /tmp/doro-approval-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/ChatModels.swift native/DoroChat/SubmissionLedger.swift tests/native/SubmissionChecks.swift -o /tmp/doro-submission-check
+      - run: /tmp/doro-submission-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors $(find native/DoroChat -name '*.swift' ! -name 'main.swift') tests/native/InteractionChecks.swift -o /tmp/doro-interaction-check
+      - run: /tmp/doro-interaction-check

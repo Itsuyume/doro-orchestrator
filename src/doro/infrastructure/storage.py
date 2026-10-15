@@ -9,7 +9,7 @@ import sqlite3
 from uuid import UUID
 
 from doro.domain.models import ApprovalReceipt, Config, DoroError, OwnerRoute, Session
-from doro.domain.policy import ensure_public
+from doro.domain.policy import ensure_public, quota_retry
 from doro.infrastructure.serde import decode_receipt, decode_session, encode_receipt, encode_session
 
 
@@ -78,7 +78,7 @@ class LocalStore:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT calls FROM daily WHERE day=?", (day,)).fetchone()
             count = int(row[0]) if row else 0
-            if count >= config.limits.daily_calls:
+            if count >= config.limits.daily_calls and not quota_retry(session, name):
                 raise DoroError("Daily model-call limit reached (UTC day)")
             session.calls[name] = session.calls.get(name, 0) + 1
             if name == "claude":

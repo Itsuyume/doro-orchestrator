@@ -58,7 +58,7 @@ class WorkBridgeTests(unittest.TestCase):
         runner = ExternalRunner()
         with tempfile.TemporaryDirectory() as tmp:
             bridge = WorkBridge(self.config, LocalStore(Path(tmp)), runner, lambda _: None)
-            session = bridge.start(self.task, "Public draft")
+            session = bridge.start(self.task, "Public draft", until_quota=False)
             bridge.decide(session.id, session.checkpoints[-1].id, "approve")
             with self.assertRaises(DoroError):
                 bridge.finish(session.id, "Premature final")

@@ -1,6 +1,6 @@
 interface:
   display_name: "도로 프로젝트 협업"
-  short_description: "요청할 때만 Claude와 협업하고 펫에서 단계·승인 답변을 연결"
+  short_description: "요청할 때 Claude와 협업하고 도로 펫에서 진행·내 입력·승인 처리"
   default_prompt: "$doro-orchestration 현재 프로젝트에서 오케스트레이션을 시작해줘. GPT Work가 본작업과 최종 판단을 맡아줘."
 policy:
   allow_implicit_invocation: true

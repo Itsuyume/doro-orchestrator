@@ -13,10 +13,13 @@ def require_approval(session: Session) -> None:
         raise DoroError("Explicit start-scope approval is required for this Work session")
 
 
-def request_checkpoint(session: Session, kind: str, summary: str) -> None:
+def request_checkpoint(session: Session, kind: str, summary: str, brief: str = "") -> None:
     if kind not in {"start", "branch", "apply"} or not summary.strip() or len(summary) > 6000:
         raise DoroError("Checkpoint needs a valid kind and a non-empty summary within 6000 characters")
     ensure_public(summary)
+    if len(brief) > 280 or (brief and not brief.strip()):
+        raise DoroError("Approval brief must be meaningful and within 280 characters; nothing was truncated")
+    ensure_public(brief)
     if session.status in {"running", "awaiting_approval", "cancelled"}:
         raise DoroError("Cannot replace a running turn or an unanswered approval")
     if session.status == "completed" and kind != "apply":
@@ -29,7 +32,7 @@ def request_checkpoint(session: Session, kind: str, summary: str) -> None:
         if previous.kind != kind:
             raise DoroError("Revise the declined checkpoint before continuing")
         resume = previous.resume_status
-    session.checkpoints.append(Checkpoint(str(uuid4()), kind, summary, resume))
+    session.checkpoints.append(Checkpoint(str(uuid4()), kind, summary, resume, brief=brief))
     session.status = "awaiting_approval"
 
 
@@ -44,8 +47,10 @@ def decide_checkpoint(session: Session, checkpoint_id: str, decision: str) -> No
 
 
 def start_summary(config: Config, session: Session) -> str:
+    policy = ("검토·재요청 횟수 상한 없음. GPT가 필요한 검토만 요청하며 실제 구독 한도 소진이면 멈춤. "
+              if session.retry_until_quota else
+              f"최대 검토 {session.rounds}회, 실패 포함 Claude 호출 {config.providers['claude'].max_calls}회, "
+              f"예상 비용 예약 상한 ${config.limits.session_reported_usd:.2f}. ")
     return (f"시작 범위: {session.task.message}\n외부 참가자: Claude Code만. AGY는 꺼짐.\n"
-            f"최대 검토 {session.rounds}회, 실패 포함 Claude 호출 {config.providers['claude'].max_calls}회, "
-            f"호출당 {config.limits.timeout_seconds}초, 예상 비용 예약 상한 "
-            f"${config.limits.session_reported_usd:.2f}.\n"
+            f"{policy}호출당 {config.limits.timeout_seconds}초.\n"
             "아래 공개 입력·초안만 전달. 중요 분기와 실제 파일 반영은 별도 승인. 프로젝트 자동 수정 없음.")

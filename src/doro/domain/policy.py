@@ -30,12 +30,18 @@ def plan_turns(participants: tuple[str, ...], rounds: int) -> tuple[PlannedTurn,
     return tuple(turns)
 
 
+def quota_retry(session: Session, provider: str) -> bool:
+    return session.mode == "work" and provider == "claude" and session.retry_until_quota
+
+
 def allow_call(config: Config, session: Session, provider_name: str) -> None:
     provider = config.providers[provider_name]
     if not provider.enabled:
         raise DoroError(f"{provider_name} is disabled; no process was launched")
     if provider_name not in session.task.allowed_providers:
         raise DoroError(f"{provider_name} is not approved for this input")
+    if quota_retry(session, provider_name):
+        return  # Explicit per-session human override; byte, privacy and per-call time bounds still apply.
     limits = config.limits
     if sum(session.calls.values()) >= limits.max_calls:
         raise DoroError("Session call limit reached")

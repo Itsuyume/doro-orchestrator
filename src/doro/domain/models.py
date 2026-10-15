@@ -13,6 +13,13 @@ class OwnerRoute:
 
 
 @dataclass(frozen=True)
+class PetSwap:
+    original_pet_id: str
+    sessions: tuple[str, ...]
+    stage: str
+
+
+@dataclass(frozen=True)
 class ApprovalReceipt:
     id: str
     session_id: str
@@ -21,6 +28,80 @@ class ApprovalReceipt:
     decision: str
     answer: str
     delivered: bool = False
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    id: str
+    sender: str
+    phase: str
+    text: str
+    state: str = "completed"
+    incoming: str = ""
+    main: bool = False
+    from_user: bool = False
+
+
+@dataclass(frozen=True)
+class HumanInput:
+    id: str
+    session_id: str
+    owner_thread_id: str
+    text: str
+    after_turn: int
+    checkpoint_id: str
+    state: str = "queued"
+    decision: str = ""
+    response: str = ""
+
+
+@dataclass(frozen=True)
+class ChatContext:
+    session_id: str
+    label: str
+    status: str
+    needs_input: bool
+    event_count: int
+    queued_inputs: int
+    finished: bool = False
+
+
+@dataclass(frozen=True)
+class ChatApproval:
+    checkpoint_id: str
+    kind: str
+    brief: str
+    details: str
+    response_pending: bool = False
+    response_decision: str = ""
+
+
+@dataclass(frozen=True)
+class ModelSelection:
+    model: str
+    effort: str
+    actual_model: str
+    models: tuple[tuple[str, str], ...]
+    efforts: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class Conversation:
+    version: int
+    session_id: str
+    title: str
+    status: str
+    usage: str
+    messages: tuple[ChatMessage, ...]
+    reply_hint: str
+    input_enabled: bool = False
+    checkpoint_id: str = ""
+    label: str = "도로 협업"
+    contexts: tuple[ChatContext, ...] = ()
+    claude_enabled: bool = False
+    agy_enabled: bool = False
+    approval: ChatApproval | None = None
+    model_selection: ModelSelection | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +163,7 @@ class Reply:
     tokens: int
     cost_usd: float | None
     native_session_id: str
+    model: str = ""
 
 
 @dataclass(frozen=True)
@@ -92,6 +174,7 @@ class Turn:
     tokens: int
     cost_usd: float | None
     native_session_id: str
+    model: str = ""
 
 
 @dataclass
@@ -101,6 +184,7 @@ class Checkpoint:
     summary: str
     resume_status: str
     decision: str = "pending"
+    brief: str = ""
 
 
 @dataclass
@@ -131,3 +215,5 @@ class Session:
     mode: str = "cli"
     checkpoints: list[Checkpoint] = field(default_factory=list)
     exchanges: list[Exchange] = field(default_factory=list)
+    retry_until_quota: bool = False
+    retry_instructions: str = ""

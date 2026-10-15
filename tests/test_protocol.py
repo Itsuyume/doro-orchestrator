@@ -20,6 +20,13 @@ class ProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(DoroError, "OAuth expired"):
             decode_reply("claude", ProcessResult(json.dumps(output), "", 0))
 
+    def test_claude_actual_model_is_retained_not_inferred_from_requested_alias(self) -> None:
+        events = [{"type": "assistant", "message": {"model": "claude-opus-5-5"}},
+                  {"type": "result", "subtype": "success", "is_error": False, "result": "review", "session_id": "n",
+                   "usage": {"input_tokens": 20, "output_tokens": 8}, "total_cost_usd": 0.01}]
+        reply = decode_reply("claude", ProcessResult("\n".join(map(json.dumps, events)), "", 0))
+        self.assertEqual((reply.model, reply.tokens), ("claude-opus-5-5", 28))
+
     def test_malformed_incomplete_and_forbidden_tool_outputs_fail(self) -> None:
         tool = {"type": "item.completed", "item": {"type": "command_execution"}}
         for output in ("not-json", "{}", json.dumps(tool)):

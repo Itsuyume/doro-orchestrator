@@ -53,7 +53,19 @@ def parse_claude(output: str) -> Reply:
         raise DoroError("Claude reported permission denials; stop for inspection")
     return Reply(string(data.get("result"), "result"), tokens,
                  number(data.get("total_cost_usd"), "total_cost_usd"),
-                 string(data.get("session_id"), "session_id"))
+                 string(data.get("session_id"), "session_id"), claude_model(events))
+
+
+def claude_model(events: list[dict[str, object]]) -> str:
+    """Retain actual assistant model IDs, including substitutions, never infer from an alias."""
+    models: list[str] = []
+    for event in events:
+        if event.get("type") != "assistant":
+            continue
+        model = mapping(event.get("message"), "Claude assistant message").get("model")
+        if model and model not in models:
+            models.append(string(model, "model"))
+    return ", ".join(models)
 
 
 def parse_agy(output: str) -> Reply:

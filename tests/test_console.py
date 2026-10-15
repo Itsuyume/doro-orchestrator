@@ -33,7 +33,7 @@ class ConsoleProgressTests(unittest.TestCase):
                     patch("webbrowser.open", side_effect=AssertionError("Browser forbidden")):
                 watch_progress(config, store, session.id, output, once=True)
             self.assertIn("승인 대기", output.getvalue())
-            self.assertIn("Claude 0/3", output.getvalue())
+            self.assertIn("Claude 호출 0회", output.getvalue())
             self.assertNotIn("PRIVATE_", output.getvalue())
             self.assertNotIn("http", output.getvalue())
             self.assertEqual(runner.prompts, [])

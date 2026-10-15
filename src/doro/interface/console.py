@@ -11,7 +11,7 @@ def activity_text(config: Config, session: Session) -> str:
     status = STATES[session.status]
     phase = PHASES[str(state["phase"])]
     return (f"{activity_title(config, session)} · {status} · {phase}\n"
-            f"발언 {len(session.turns)}개 · Claude {session.calls.get('claude', 0)}/{config.providers['claude'].max_calls}회"
+            f"발언 {len(session.turns)}개 · Claude 호출 {session.calls.get('claude', 0)}회"
             f" · AGY {'활성' if config.providers['agy'].enabled else '꺼짐'}\n"
             "진행·승인은 현재 Work 대화와 앱 펫에서 확인해.\n")
 

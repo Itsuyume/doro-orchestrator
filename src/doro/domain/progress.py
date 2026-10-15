@@ -4,6 +4,7 @@ from doro.domain.work import review_count
 
 
 def progress(config: Config, session: Session) -> dict[str, object]:
+    open_ended = session.mode == "work" and session.retry_until_quota
     if session.status == "completed":
         speaker, phase = session.turns[-1].provider, "completed"
     elif session.mode == "work":
@@ -15,11 +16,11 @@ def progress(config: Config, session: Session) -> dict[str, object]:
         speaker, phase = pending.provider, pending.phase
     return {"session_id": session.id, "mode": session.mode, "status": session.status,
             "speaker": speaker, "phase": phase, "main_owner": "work" if session.mode == "work" else "codex",
-            "completed_turns": len(session.turns), "maximum_turns": session.rounds * 2 + 1,
-            "calls": session.calls, "call_limit": config.limits.max_calls,
-            "claude_call_limit": config.providers["claude"].max_calls,
+            "completed_turns": len(session.turns), "maximum_turns": None if open_ended else session.rounds * 2 + 1,
+            "calls": session.calls, "call_limit": None if open_ended else config.limits.max_calls,
+            "claude_call_limit": None if open_ended else config.providers["claude"].max_calls,
             "tokens_reported": session.tokens_used, "cost_usd_reported": session.reported_usd,
-            "agy_enabled": config.providers["agy"].enabled,
+            "agy_enabled": config.providers["agy"].enabled, "retry_until_quota": session.retry_until_quota,
             "error": session.error, "task": session.task.message, "context": session.task.context,
             "turns": [{"speaker": t.provider, "phase": t.phase, "text": t.text} for t in session.turns],
             "checkpoints": [{"id": g.id, "kind": g.kind, "summary": g.summary, "decision": g.decision}

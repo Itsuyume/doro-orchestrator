@@ -1,4 +1,5 @@
 import argparse
+from collections.abc import Callable
 from dataclasses import asdict
 import json
 from pathlib import Path
@@ -19,6 +20,10 @@ from doro.interface.input import load_task
 from doro.interface.work_cli import add_work_parser, run_work
 from doro.interface.console import watch_progress
 from doro.interface.approval_cli import add_approval_parser, run_approvals
+from doro.interface.chat_cli import add_chat_parser, run_chat
+from doro.interface.input_cli import add_input_parser, run_inputs
+from doro.interface.pet_cli import add_pet_parser, run_pet_swap
+from doro.interface.model_cli import add_model_parser, run_model
 
 
 def parser(root: Path) -> argparse.ArgumentParser:
@@ -28,6 +33,10 @@ def parser(root: Path) -> argparse.ArgumentParser:
     commands.add_parser("doctor", help="Local version/auth checks; never probes disabled participants")
     add_work_parser(commands)
     add_approval_parser(commands)
+    add_chat_parser(commands)
+    add_input_parser(commands)
+    add_pet_parser(commands)
+    add_model_parser(commands)
     watch = commands.add_parser("watch", help="Print only local phase metadata; no web server or browser")
     watch.add_argument("session_id")
     watch.add_argument("--once", action="store_true", help="Read one local status without waiting")
@@ -44,7 +53,10 @@ def parser(root: Path) -> argparse.ArgumentParser:
     return result
 
 
-def output(value: object) -> None:
+def output(value: object, *, as_text: bool = False) -> None:
+    if as_text:
+        print(value, end="")
+        return
     print(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False))
 
 
@@ -79,13 +91,26 @@ def execute_session(config: Config, store: LocalStore, session: Session) -> None
             "transcript": str(store.root / "results" / (result.id + ".md"))})
 
 
+def run_local_control(args: argparse.Namespace, config: Config, root: Path) -> object:
+    actions: dict[str, Callable[[], object]] = {
+        "inputs": lambda: run_inputs(args, root),
+        "approvals": lambda: run_approvals(args, config, LocalStore(root / ".doro")),
+        "pet-swap": lambda: run_pet_swap(args, root),
+        "model": lambda: run_model(args, root),
+    }
+    return actions[args.command]()
+
+
 def dispatch(args: argparse.Namespace, root: Path) -> None:
     config = load_config(args.config, root / "roles")
     if args.command == "work":
         output(run_work(args, config, root))
         return
-    if args.command == "approvals":
-        output(run_approvals(args, config, LocalStore(root / ".doro")))
+    if args.command in {"approvals", "inputs", "pet-swap", "model"}:
+        output(run_local_control(args, config, root))
+        return
+    if args.command == "chat":
+        output(run_chat(args, config, root), as_text=args.text)
         return
     if args.command == "watch":
         watch_progress(config, LocalStore(root / ".doro"), args.session_id, sys.stdout, once=args.once)

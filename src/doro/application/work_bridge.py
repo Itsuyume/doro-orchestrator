@@ -18,13 +18,13 @@ class WorkBridge:
         self.executor = TurnExecutor(config, store, runner, notify)
         self.check_ready = check_ready
 
-    def start(self, task: Task, draft: str, scope: str = "") -> Session:
+    def start(self, task: Task, draft: str, scope: str = "", *, until_quota: bool = True, brief: str = "") -> Session:
         session = Session(str(uuid4()), task, self.config.fingerprint, ("work", "claude"),
-                          self.config.limits.debate_rounds, mode="work")
+                          self.config.limits.debate_rounds, mode="work", retry_until_quota=until_quota)
         session.turns.append(work_text(self.config, draft, "draft"))
         validate_work(self.config, session)
         session.status = "awaiting_claude"
-        request_checkpoint(session, "start", scope or start_summary(self.config, session))
+        request_checkpoint(session, "start", scope or start_summary(self.config, session), brief)
         self.store.save(session)
         self.store.export(session)
         return session
@@ -36,7 +36,7 @@ class WorkBridge:
             require_approval(session)
             if session.status == "completed" or session.turns[-1].provider != "work":
                 raise DoroError("Claude review needs a new Work draft/rebuttal; no duplicate call was made")
-            if review_count(session) >= session.rounds:
+            if not session.retry_until_quota and review_count(session) >= session.rounds:
                 raise DoroError("Configured review count reached; Work must make the final judgment")
             try:
                 if self.check_ready is not None:
@@ -64,7 +64,7 @@ class WorkBridge:
             require_approval(session)
             if session.status != "awaiting_work" or session.turns[-1].provider != "claude":
                 raise DoroError("A Work reply/final needs a completed Claude review")
-            if phase == "rebuttal" and review_count(session) >= session.rounds:
+            if phase == "rebuttal" and not session.retry_until_quota and review_count(session) >= session.rounds:
                 raise DoroError("Review limit reached; finish with GPT Work's final judgment")
             session.turns.append(work_text(self.config, text, phase))
             session.status = "completed" if phase == "final" else "awaiting_claude"
@@ -79,11 +79,11 @@ class WorkBridge:
     def finish(self, session_id: str, text: str) -> Session:
         return self.write(session_id, text, "final")
 
-    def checkpoint(self, session_id: str, kind: str, summary: str) -> Session:
+    def checkpoint(self, session_id: str, kind: str, summary: str, brief: str = "") -> Session:
         with self.store.lock(session_id):
             session = self.store.load(session_id)
             validate_work(self.config, session)
-            request_checkpoint(session, kind, summary)
+            request_checkpoint(session, kind, summary, brief)
             self.store.save(session)
             self.store.export(session)
             return session
@@ -107,4 +107,32 @@ class WorkBridge:
             session.status, session.error = "cancelled", ""
             self.store.save(session)
             self.store.export(session)
+            return session
+
+    def lift_limits(self, session_id: str) -> Session:
+        """Apply the human's open-ended Work policy without starting or resuming a turn."""
+        with self.store.lock(session_id):
+            session = self.store.load(session_id)
+            validate_work(self.config, session)
+            if session.status == "running":
+                raise DoroError("Wait for the current external turn before changing its local limits")
+            session.retry_until_quota = True
+            self.store.save(session)
+            self.store.export(session)
+            return session
+
+    def retry(self, session_id: str, instructions: str, until_quota: bool, task: Task | None = None) -> Session:
+        with self.store.lock(session_id):
+            session = self.store.load(session_id)
+            validate_work(self.config, session)
+            require_approval(session)
+            if session.status not in {"failed", "interrupted"} or session.turns[-1].provider != "work":
+                raise DoroError("Retry preparation needs a failed/interrupted Claude attempt")
+            if task is not None:
+                session.task = task  # Previous exact packets remain in their immutable exchange inputs.
+                validate_work(self.config, session)
+            session.retry_instructions = work_text(self.config, instructions, "rebuttal").text
+            session.retry_until_quota = until_quota or session.retry_until_quota
+            session.status, session.error = "awaiting_claude", ""
+            self.store.save(session)
             return session
