@@ -2,7 +2,7 @@ import AppKit
 
 @main
 struct InteractionChecks {
-    @MainActor static func main() {
+    @MainActor static func main() throws {
         var drag = WindowDragState()
         precondition(!drag.finish(), "A mouse-up without a mouse-down must not open a chat")
         precondition(drag.move(to: NSPoint(x: 9, y: 9)) == nil)
@@ -16,6 +16,13 @@ struct InteractionChecks {
         drag.begin(at: NSPoint(x: 100, y: 100), origin: NSPoint(x: 20, y: 30))
         precondition(drag.move(to: NSPoint(x: 80, y: 70)) == NSPoint(x: 0, y: 0))
         precondition(!drag.finish())
+        let visible = NSRect(x: -1200, y: 20, width: 1200, height: 800)
+        precondition(clampedPanelOrigin(NSPoint(x: -2000, y: -100), size: NSSize(width: 200, height: 46), visible: visible)
+                     == NSPoint(x: -1200, y: 20))
+        precondition(clampedPanelOrigin(NSPoint(x: 100, y: 900), size: NSSize(width: 200, height: 46), visible: visible)
+                     == NSPoint(x: -200, y: 774))
+        precondition(clampedPanelOrigin(NSPoint(x: 40, y: 50), size: NSSize(width: 2000, height: 1000), visible: visible)
+                     == visible.origin)
 
         let controller = ChatController(command: ["/usr/bin/false", "chat", "A", "--json"])
         let context = ChatContext(session_id: "A", label: "Task", status: "waiting", needs_input: true,
@@ -29,7 +36,7 @@ struct InteractionChecks {
         controller.closeStack("A")
         precondition(!controller.stacks.contains("A") && controller.display == .hidden)
         precondition(controller.inputText == "Unsent draft" && controller.contexts[0].needs_input)
-        controller.synchronizeStacks([context])
+        try controller.synchronizeStacks([context])
         precondition(controller.display == .hidden && !controller.stacks.contains("A"), "Polling cannot reopen a closed task")
         controller.openContext("A")
         precondition(!controller.collapsed && controller.stacks.contains("A") && controller.display == .panel)

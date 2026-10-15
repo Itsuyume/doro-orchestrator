@@ -40,6 +40,7 @@ class ChatMessage:
     incoming: str = ""
     main: bool = False
     from_user: bool = False
+    retryable: bool = False
 
 
 @dataclass(frozen=True)

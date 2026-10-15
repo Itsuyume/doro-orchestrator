@@ -31,4 +31,6 @@ jobs:
       - run: /tmp/doro-submission-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors $(find native/DoroChat -name '*.swift' ! -name 'main.swift') tests/native/InteractionChecks.swift -o /tmp/doro-interaction-check
       - run: /tmp/doro-interaction-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors $(find native/DoroChat -name '*.swift' ! -name 'main.swift') tests/native/HistoryChecks.swift -o /tmp/doro-history-check
+      - run: /tmp/doro-history-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors tools/cursor_cleanup/inspector.swift -o /tmp/doro-cursor-inspector

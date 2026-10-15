@@ -21,6 +21,7 @@ struct ViewerRequest: Decodable, Sendable {
     let session_id: String
     let display: ViewerDisplay
     let tokens: [String: String]
+    let show_tasks: Bool?
 }
 
 func readViewerRequest() throws -> ViewerRequest {
@@ -38,7 +39,8 @@ func readViewerRequest() throws -> ViewerRequest {
 
 struct ContextMemory {
     var text = ""
-    var status = "입력은 이 스택에만 전달되도로."
+    var status = ""
+    var lastInputID: String?
     var submissions = SubmissionLedger()
     var expanded: Set<String> = []
     var scrollTarget: String?

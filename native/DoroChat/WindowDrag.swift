@@ -39,6 +39,10 @@ final class WindowDragView: NSView {
     private var drag = WindowDragState()
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.withAlphaComponent(0.01).setFill()
+        dirtyRect.fill()
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
@@ -46,12 +50,15 @@ final class WindowDragView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let window, let origin = drag.move(to: window.convertPoint(toScreen: event.locationInWindow)) else { return }
-        window.setFrameOrigin(origin)
+        guard let window else { return }
+        let point = window.convertPoint(toScreen: event.locationInWindow)
+        guard let origin = drag.move(to: point) else { return }
+        let area = (NSScreen.screens.first { $0.frame.contains(point) } ?? window.screen)?.visibleFrame
+        if let area { window.setFrameOrigin(clampedPanelOrigin(origin, size: window.frame.size, visible: area)) }
     }
 
     override func mouseUp(with event: NSEvent) {
-        if drag.finish() { onTap?() }
+        if drag.finish(), event.clickCount <= 1 { onTap?() }
     }
 
     override func accessibilityPerformPress() -> Bool {
@@ -68,7 +75,7 @@ struct WindowDragHandle: NSViewRepresentable {
 
     func updateNSView(_ view: WindowDragView, context: Context) {
         view.onTap = onTap
-        view.toolTip = onTap == nil ? "드래그해서 이동" : "클릭해서 열기 · 드래그해서 이동"
+        view.toolTip = nil
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(onTap == nil ? .group : .button)
         view.setAccessibilityLabel(label)

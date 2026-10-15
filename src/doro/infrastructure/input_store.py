@@ -8,6 +8,7 @@ from doro.domain.models import DoroError, HumanInput
 from doro.domain.validation import string
 from doro.infrastructure.serde import decode_session
 from doro.infrastructure.storage import LocalStore, session_key
+from doro.infrastructure.delivery_store import initialize_deliveries, queue_delivery, received_delivery
 
 
 def authorize_ui(connection: sqlite3.Connection, session_id: str, token: str) -> None:
@@ -30,6 +31,7 @@ class LocalInputStore:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("CREATE TABLE IF NOT EXISTS ui_tokens (digest TEXT PRIMARY KEY, session_id TEXT NOT NULL, expires REAL NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS user_inputs (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, owner_thread_id TEXT NOT NULL, text TEXT NOT NULL, after_turn INTEGER NOT NULL, checkpoint_id TEXT NOT NULL, state TEXT NOT NULL, decision TEXT NOT NULL, response TEXT NOT NULL)")
+            initialize_deliveries(connection)
 
     def register_ui(self, session_id: str) -> str:
         session_key(session_id)
@@ -73,7 +75,15 @@ class LocalInputStore:
             connection.execute("INSERT INTO user_inputs VALUES (?,?,?,?,?,?,?,?,?)",
                                (note.id, note.session_id, note.owner_thread_id, note.text, note.after_turn, note.checkpoint_id,
                                 note.state, note.decision, note.response))
+            queue_delivery(connection, note.id)
         return note
+
+    def get(self, note_id: str) -> HumanInput:
+        with self.sessions.connect() as connection:
+            row = connection.execute("SELECT * FROM user_inputs WHERE id=?", (session_key(note_id),)).fetchone()
+        if row is None:
+            raise DoroError("Human input not found")
+        return decode_input(tuple(row))
 
     def inputs(self, session_id: str) -> tuple[HumanInput, ...]:
         with self.sessions.connect() as connection:
@@ -98,6 +108,7 @@ class LocalInputStore:
             if note.owner_thread_id != session_key(owner):
                 raise DoroError("Only the owning Work can acknowledge this human input")
             connection.execute("UPDATE user_inputs SET state='read',response=? WHERE id=?", (response, note_id))
+            received_delivery(connection, note_id)
         return replace(note, state="read", response=response)
 
 

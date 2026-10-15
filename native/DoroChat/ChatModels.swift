@@ -11,6 +11,7 @@ struct ChatMessage: Decodable, Identifiable, Sendable {
     let incoming: String
     let main: Bool
     let from_user: Bool
+    let retryable: Bool?
 }
 
 struct Conversation: Decodable, Sendable {
@@ -103,8 +104,24 @@ func readConversation(_ command: [String]) throws -> Conversation {
     return view
 }
 
-func postInput(_ command: [String], text: String, checkpoint: String, id: String, decision: String, token: String) throws {
+struct DeliveryReceipt: Decodable, Sendable {
+    struct Delivery: Decodable, Sendable { let state: String; let error: String }
+    let delivery: Delivery?
+    var status: String {
+        switch delivery?.state {
+        case "queued": return "Work 확인 대기"
+        case "received": return "도로 확인"
+        case "failed": return "저장됨 · Work 연결 실패"
+        case "unknown", "dispatching": return "저장됨 · 전달 확인 필요"
+        case "stale": return "질문 바뀜 · 새 승인 확인"
+        default: return "저장됨"
+        }
+    }
+}
+
+func postInput(_ command: [String], text: String, checkpoint: String, id: String, decision: String, token: String) throws -> DeliveryReceipt {
     let data = try JSONSerialization.data(withJSONObject: ["text": text, "checkpoint_id": checkpoint,
                                                            "client_id": id, "decision": decision])
-    _ = try localCommand(Array(command.dropLast()) + ["--post"], input: data, capability: token)
+    let result = try localCommand(Array(command.dropLast()) + ["--post", "--wake"], input: data, capability: token)
+    return try JSONDecoder().decode(DeliveryReceipt.self, from: result)
 }

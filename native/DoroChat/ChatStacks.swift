@@ -8,11 +8,16 @@ extension ChatController {
     }
 
     var pinnedContexts: [ChatContext] { contexts.filter { stacks.contains($0.id) } }
-    var otherContexts: [ChatContext] { contexts.filter { !stacks.contains($0.id) } }
+    var otherContexts: [ChatContext] { contexts.filter { stacks.isListed($0.id) && !stacks.contains($0.id) } }
 
     func openContext(_ id: String) {
         guard contexts.contains(where: { $0.id == id }) else { return }
+        if !stacks.isListed(id) {
+            do { try saveHistory(StackHistorySnapshot(removed: stacks.removed.subtracting([id]), undo: lastRemoved.subtracting([id]))) }
+            catch { readError = "목록을 복원하지 못했도로: \(error.localizedDescription)"; return }
+        }
         stacks.open(id)
+        lastRemoved.remove(id)
         showingTasks = false
         selectContext(id)
         collapsed = false
@@ -52,9 +57,16 @@ extension ChatController {
         refresh()
     }
 
-    func synchronizeStacks(_ contexts: [ChatContext]) {
+    func synchronizeStacks(_ contexts: [ChatContext]) throws {
         let previous = pinnedContexts.count
-        stacks.synchronize(contexts, selected: selectedSession)
-        if previous != pinnedContexts.count { onStackLayout?() }
+        var next = stacks
+        next.synchronize(contexts, selected: selectedSession)
+        let undo = lastRemoved.intersection(next.removed)
+        if next.removed != stacks.removed {
+            try saveHistory(StackHistorySnapshot(removed: next.removed, undo: undo))
+        }
+        stacks = next
+        lastRemoved = undo
+        if previous != pinnedContexts.count || showingTasks { onStackLayout?() }
     }
 }

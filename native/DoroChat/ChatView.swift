@@ -1,8 +1,10 @@
+import AppKit
 import SwiftUI
 
 struct MessageBubble: View {
     let message: ChatMessage
     @Binding var expanded: Bool
+    var onRetry: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -14,7 +16,7 @@ struct MessageBubble: View {
                         Text(message.phase).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
                     }
                     Text(verbatim: message.text).font(.system(size: 14)).lineSpacing(3)
-                        .lineLimit(expanded ? nil : 6).textSelection(.enabled)
+                        .lineLimit(expanded ? nil : 6)
                     if message.text.count > 180 {
                         Button(expanded ? "발언 접기" : "전체 발언 펼치기") { expanded.toggle() }
                             .buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
@@ -22,10 +24,13 @@ struct MessageBubble: View {
                     if message.state != "completed" {
                         Text(message.state).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                     }
+                    if message.retryable == true {
+                        Button("다시 보내기") { onRetry?() }.buttonStyle(.plain).font(.system(size: 11))
+                    }
                     if !message.incoming.isEmpty {
                         DisclosureGroup("이 발언자가 받은 입력") {
                             Text(verbatim: message.incoming).font(.system(size: 11, design: .monospaced))
-                                .textSelection(.enabled).padding(.top, 6)
+                                .padding(.top, 6)
                         }.font(.system(size: 11)).tint(.primary)
                     }
                 }
@@ -37,6 +42,12 @@ struct MessageBubble: View {
         }
         .accessibilityElement(children: .contain)
         .padding(.horizontal, 10)
+        .contextMenu {
+            Button("복사") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(message.text, forType: .string)
+            }
+        }
     }
 }
 
@@ -52,12 +63,6 @@ struct ChatView: View {
             }
             if controller.collapsed, controller.display == .panel {
                 StackTray(controller: controller)
-                HStack {
-                    ContextSelector(controller: controller)
-                    WindowDragHandle().frame(minWidth: 18, maxWidth: .infinity).frame(height: 18)
-                    if controller.approvalCount > 0 { ApprovalEntry(controller: controller) }
-                }.font(.system(size: 11)).padding(7)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9))
             }
             if controller.display == .integrated { HStack {
                 if controller.collapsed, !controller.pinnedContexts.isEmpty { StackTray(controller: controller) }
@@ -73,6 +78,11 @@ struct ChatView: View {
         }
         .foregroundStyle(Color.black.opacity(0.86))
         .padding(6)
+        .overlay {
+            if controller.collapsed, controller.display == .panel {
+                WindowDragHandle(label: "작업 목록", onTap: { controller.toggleChat() })
+            }
+        }
         .preferredColorScheme(.light)
     }
 
@@ -124,7 +134,8 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(view.messages) { message in
-                        MessageBubble(message: message, expanded: expansion(message.id)).id(message.id)
+                        MessageBubble(message: message, expanded: expansion(message.id),
+                                      onRetry: { controller.retryDelivery(message.id) }).id(message.id)
                     }
                     Color.clear.frame(height: 1).id("latest")
                 }.frame(maxWidth: .infinity).padding(.vertical, 12).scrollTargetLayout()

@@ -21,7 +21,20 @@ class ViewerReceipt:
     display: str
 
 
-def write_request(store: LocalStore, session_id: str, display: str) -> ViewerReceipt:
+def window_target(store: LocalStore, explicit: str | None = None) -> tuple[str, bool]:
+    routes = store.routes()
+    if not routes:
+        raise DoroError("No registered Work exists yet; start collaboration in its project first")
+    registered = {route.session_id for route in routes}
+    if explicit is not None:
+        if session_key(explicit) not in registered:
+            raise DoroError("The selected collaboration has no registered owner")
+        return explicit, False
+    # The seed only loads the task list. It never authorizes a project or a model call.
+    return routes[-1].session_id, True
+
+
+def write_request(store: LocalStore, session_id: str, display: str, *, show_tasks: bool = False) -> ViewerReceipt:
     session_key(session_id)
     if display not in {"integrated", "panel", "hidden", "stop"}:
         raise DoroError("Unknown local viewer display mode")
@@ -30,7 +43,7 @@ def write_request(store: LocalStore, session_id: str, display: str) -> ViewerRec
     inputs = LocalInputStore(store)
     tokens = {route.session_id: inputs.register_ui(route.session_id) for route in store.routes()}
     packet = {"version": 1, "request_id": str(uuid4()), "session_id": session_id,
-              "display": display, "tokens": tokens}
+              "display": display, "tokens": tokens, "show_tasks": show_tasks}
     path = directory / "viewer-request.json"
     if path.is_symlink():
         raise DoroError("Viewer request symlinks are not allowed")

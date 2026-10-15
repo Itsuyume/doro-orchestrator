@@ -66,7 +66,8 @@ def viewer_app(root: Path) -> Path:
     return app
 
 
-def launch_viewer(root: Path, session_id: str, config_path: Path, display: str = "panel") -> dict[str, object]:
+def launch_viewer(root: Path, session_id: str, config_path: Path, display: str = "panel", *,
+                  show_tasks: bool = False) -> dict[str, object]:
     session_key(session_id)
     app = viewer_app(root)
     logs = root / ".doro/native"
@@ -79,12 +80,13 @@ def launch_viewer(root: Path, session_id: str, config_path: Path, display: str =
     state = PetSwapLedger(store).current()
     if display == "integrated" and (state is None or state.stage != "active" or session_id not in state.sessions):
         raise DoroError("Confirm the official pet swap first; chat --display panel keeps the original pet")
-    sprite = Path.home() / ".codex/pets/dororong/spritesheet.webp"
-    if not sprite.is_file() or sprite.is_symlink() or sprite.stat().st_size > 20_000_000:
-        raise DoroError("The local Doro v2 sprite is missing or invalid; original assets were not changed")
-    env["DORO_CHAT_PET_SPRITE"] = str(sprite)
+    if display == "integrated":
+        sprite = Path.home() / ".codex/pets/dororong/spritesheet.webp"
+        if not sprite.is_file() or sprite.is_symlink() or sprite.stat().st_size > 20_000_000:
+            raise DoroError("The local Doro v2 sprite is missing or invalid; original assets were not changed")
+        env["DORO_CHAT_PET_SPRITE"] = str(sprite)
     with viewer_lock(root) as lock:
-        request = write_request(store, session_id, display)
+        request = write_request(store, session_id, display, show_tasks=show_tasks)
         env["DORO_CHAT_REQUEST"] = str(request.path)
         if lock is None:
             wait_for_ack(request)

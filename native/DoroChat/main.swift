@@ -8,11 +8,18 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: NSWindow?
     private var expandedSize = NSSize(width: 390, height: 590)
     private var wasCollapsed = false
+    private var wasShowingTasks = false
     private var approvalWindow: ApprovalWindow?
     private var statusItem: NSStatusItem?
+    private var panelDragging: PanelDragGesture?
 
-    init(command: [String]) {
-        controller = ChatController(command: command)
+    init(command: [String]) throws {
+        guard let request = ProcessInfo.processInfo.environment["DORO_CHAT_REQUEST"] else {
+            throw ChatReadError.failed("작업창 연결 경로가 없도로.")
+        }
+        let path = URL(fileURLWithPath: request).deletingLastPathComponent().appendingPathComponent("stack-history.json")
+        let history = StackHistoryStore(path: path)
+        controller = ChatController(command: command, history: try history.load(), saveHistory: history.save)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -22,13 +29,15 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                               styleMask: [.borderless, .resizable, .nonactivatingPanel],
                               backing: .buffered, defer: false)
         window.title = "도로 펫 협업"
-        window.backgroundColor = .clear
+        window.backgroundColor = NSColor.black.withAlphaComponent(0.01)
         window.isOpaque = false
         window.hasShadow = false
         window.hidesOnDeactivate = false
         window.isMovableByWindowBackground = false
         window.minSize = NSSize(width: 320, height: 400)
-        window.contentView = NSHostingView(rootView: ChatView(controller: controller))
+        let host = NSHostingView(rootView: ChatView(controller: controller))
+        window.contentView = host
+        panelDragging = PanelDragGesture(window: window, view: host)
         window.level = .floating
         window.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces]
         window.isReleasedWhenClosed = false
@@ -106,19 +115,22 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let window else { return }
         let previous = window.frame
         let visible = window.screen?.visibleFrame ?? previous
-        if !wasCollapsed { expandedSize = previous.size }
+        let tasks = !collapsed && controller.showingTasks
+        let anchorTop = tasks && wasShowingTasks && !wasCollapsed
+        if !wasCollapsed && !wasShowingTasks { expandedSize = previous.size }
         wasCollapsed = collapsed
+        wasShowingTasks = controller.showingTasks
         let count = controller.pinnedContexts.count
-        let trayHeight = min(count, 3) * 31 + (count > 3 ? 18 : 0)
-        let compactHeight = controller.display == .integrated ? max(95, trayHeight + 12) : trayHeight + 45
-        let compactWidth = controller.display == .integrated ? (count == 0 ? 94 : 258) : 250
+        let compactHeight = controller.display == .integrated ? 95 : 46
+        let compactWidth = controller.display == .integrated ? (count == 0 ? 94 : 258) : 200
         window.minSize = NSSize(width: collapsed ? CGFloat(compactWidth) : 320,
-                                height: collapsed ? CGFloat(compactHeight) : 400)
-        let height = min(collapsed ? CGFloat(compactHeight) : expandedSize.height, visible.height)
-        let width = min(collapsed ? CGFloat(compactWidth) : expandedSize.width, visible.width)
-        let x = max(visible.minX, min(previous.maxX - width, visible.maxX - width))
-        let y = max(visible.minY, min(previous.minY, visible.maxY - height))
-        window.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true, animate: true)
+                                height: collapsed ? CGFloat(compactHeight) : tasks ? 200 : 400)
+        let height = min(collapsed ? CGFloat(compactHeight) : tasks ? CGFloat(controller.taskPanelHeight) : expandedSize.height, visible.height)
+        let width = min(collapsed ? CGFloat(compactWidth) : tasks ? 390 : expandedSize.width, visible.width)
+        let point = NSPoint(x: previous.maxX - width, y: anchorTop ? previous.maxY - height : previous.minY)
+        let origin = clampedPanelOrigin(point, size: NSSize(width: width, height: height), visible: visible)
+        let target = NSRect(origin: origin, size: NSSize(width: width, height: height))
+        if target != previous { window.setFrame(target, display: true, animate: true) }
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -141,6 +153,8 @@ guard command.count >= 3, command.last == "--json", command[command.count - 3] =
 _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
-let delegate = ChatAppDelegate(command: command)
+let delegate: ChatAppDelegate
+do { delegate = try ChatAppDelegate(command: command) }
+catch { fputs("Unable to open task window: \(error.localizedDescription)\n", stderr); exit(1) }
 application.delegate = delegate
 application.run()

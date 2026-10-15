@@ -78,10 +78,10 @@ def context_summary(session: Session, label: str, inputs: tuple[HumanInput, ...]
 
 def reply_hint(status: str, label: str) -> str:
     if status == "awaiting_approval":
-        return "답변은 펫 입력창에 ‘" + label + " 이 범위 승인해 / 보류해’라고 보내줘도로."
+        return "이 창의 승인·보류 버튼으로 답해줘도로."
     if status in {"completed", "cancelled"}:
-        return "이번 협업은 끝났도로. 새로운 협업은 프로젝트 Work에서 요청해줘도로."
-    return "질문·방향 변경은 펫 입력창에 협업명 ‘" + label + "’과 함께 보내줘도로."
+        return "여기서 이 작업의 새 협업을 요청할 수 있도로."
+    return "질문이나 방향 변경은 아래 입력창에 보내줘도로."
 
 
 def input_messages(note: HumanInput) -> tuple[ChatMessage, ...]:
