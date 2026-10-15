@@ -1,0 +1,23 @@
+from contextlib import AbstractContextManager
+from pathlib import Path
+from typing import Protocol
+
+from doro.domain.models import Config, Reply, Session
+
+
+class Runner(Protocol):
+    def call(self, name: str, prompt: str, cwd: Path, timeout: float) -> Reply: ...
+
+
+class Store(Protocol):
+    def load(self, session_id: str) -> Session: ...
+
+    def save(self, session: Session) -> None: ...
+
+    def reserve(self, session: Session, config: Config, name: str) -> None: ...
+
+    def lock(self, session_id: str) -> AbstractContextManager[None]: ...
+
+    def workspace(self, session_id: str) -> Path: ...
+
+    def export(self, session: Session) -> Path: ...

@@ -1,0 +1,35 @@
+version = 1
+
+[limits]
+debate_rounds = 2
+max_calls = 8
+daily_calls = 30
+timeout_seconds = 90
+session_seconds = 600
+max_prompt_chars = 24000
+max_response_chars = 6000
+max_process_bytes = 1000000
+max_tokens = 100000
+claude_call_usd = 0.50
+session_reported_usd = 2.00
+
+[providers.codex]
+enabled = true
+command = ["codex"]
+model = "gpt-6.1-sol"
+effort = "medium"
+max_calls = 5
+
+[providers.claude]
+enabled = true
+command = ["claude"]
+model = ""
+effort = "medium"
+max_calls = 3
+
+[providers.agy]
+enabled = false
+command = ["agy"]
+model = ""
+effort = ""
+max_calls = 1

@@ -1,0 +1,10 @@
+.doro/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.venv/
+.DS_Store
+*.log
+local-*.toml
+private-*.json

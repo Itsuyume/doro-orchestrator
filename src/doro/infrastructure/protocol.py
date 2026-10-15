@@ -1,0 +1,65 @@
+import json
+
+from doro.domain.models import DoroError, Reply
+from doro.domain.validation import integer, mapping, number, string
+from doro.infrastructure.process import ProcessResult
+
+
+def parse_codex(output: str) -> Reply:
+    messages: list[str] = []
+    usage: dict[str, object] | None = None
+    session_id = ""
+    for line in output.splitlines():
+        event = mapping(json.loads(line), "Codex event")
+        kind = event.get("type")
+        if kind in ("error", "turn.failed"):
+            raise DoroError("Codex reported a failed turn: " + json.dumps(event, ensure_ascii=False)[:1000])
+        if kind == "thread.started":
+            session_id = string(event.get("thread_id"), "thread_id")
+        if kind == "item.completed":
+            item = mapping(event.get("item"), "item")
+            if item.get("type") in ("command_execution", "file_change", "mcp_tool_call", "web_search"):
+                raise DoroError("Codex attempted a forbidden tool operation")
+            if item.get("type") == "agent_message":
+                messages.append(string(item.get("text"), "agent_message"))
+        if kind == "turn.completed":
+            usage = mapping(event.get("usage"), "usage")
+    if usage is None or not messages:
+        raise DoroError("Codex response lacks a completed turn or message")
+    tokens = integer(usage.get("input_tokens"), "input_tokens", low=0, high=10_000_000)
+    tokens += integer(usage.get("output_tokens"), "output_tokens", low=0, high=10_000_000)
+    return Reply("\n\n".join(messages), tokens, None, session_id)
+
+
+def parse_claude(output: str) -> Reply:
+    data = mapping(json.loads(output), "Claude result")
+    if data.get("is_error") is not False or data.get("subtype") != "success":
+        raise DoroError("Claude failed: " + str(data.get("result", data.get("subtype")))[:1000])
+    usage = mapping(data.get("usage"), "usage")
+    tokens = sum(integer(usage.get(k, 0), k, low=0, high=10_000_000) for k in
+                 ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+    if data.get("permission_denials"):
+        raise DoroError("Claude reported permission denials; stop for inspection")
+    return Reply(string(data.get("result"), "result"), tokens,
+                 number(data.get("total_cost_usd"), "total_cost_usd"),
+                 string(data.get("session_id"), "session_id"))
+
+
+def parse_agy(output: str) -> Reply:
+    data = mapping(json.loads(output), "AGY result")
+    if data.get("status") != "SUCCESS":
+        raise DoroError("AGY did not complete successfully")
+    usage = mapping(data.get("usage"), "usage")
+    return Reply(string(data.get("response"), "response"),
+                 integer(usage.get("total_tokens"), "total_tokens", low=0, high=10_000_000),
+                 None, string(data.get("conversation_id"), "conversation_id"))
+
+
+def decode_reply(provider: str, result: ProcessResult) -> Reply:
+    try:
+        if result.returncode:
+            detail = (result.stderr or result.stdout)[-1500:]
+            raise DoroError(f"{provider} exited {result.returncode}: {detail}")
+        return {"codex": parse_codex, "claude": parse_claude, "agy": parse_agy}[provider](result.stdout)
+    except (json.JSONDecodeError, UnicodeError) as error:
+        raise DoroError(f"{provider} emitted malformed output") from error

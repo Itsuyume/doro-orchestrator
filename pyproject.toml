@@ -1,0 +1,23 @@
+[project]
+name = "doro-orchestrator"
+version = "0.1.0"
+description = "GPT-led local CLI discussion over explicit public text packets"
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
