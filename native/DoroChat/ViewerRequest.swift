@@ -4,13 +4,16 @@ enum ViewerDisplay: String, Decodable, Sendable {
     case integrated, panel, hidden, stop
 }
 
+enum ViewerIntent: String, Decodable, Sendable { case open, minimize, hide }
+
 func acknowledgeViewerRequest(_ request: ViewerRequest) throws {
     guard let source = ProcessInfo.processInfo.environment["DORO_CHAT_REQUEST"] else {
         throw ChatReadError.failed("전용 실행기의 연결 경로가 없도로.")
     }
     let path = URL(fileURLWithPath: source).deletingLastPathComponent().appendingPathComponent("viewer-ack.json")
     let data = try JSONSerialization.data(withJSONObject: ["request_id": request.request_id,
-                                                          "display": request.display.rawValue])
+                                                          "display": request.display.rawValue,
+                                                          "intent": (request.intent ?? .open).rawValue])
     try data.write(to: path, options: .atomic)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
 }
@@ -22,6 +25,7 @@ struct ViewerRequest: Decodable, Sendable {
     let display: ViewerDisplay
     let tokens: [String: String]
     let show_tasks: Bool?
+    let intent: ViewerIntent?
 }
 
 func readViewerRequest() throws -> ViewerRequest {

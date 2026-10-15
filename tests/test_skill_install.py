@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import os
+import sys
 
 from tools.install_work_skill import install
 
@@ -18,6 +20,8 @@ class SkillInstallTests(unittest.TestCase):
             self.assertEqual(value["project_root"], str(ROOT))
             self.assertEqual(value["external"], ["claude"])
             self.assertFalse(value["agy_enabled"])
+            self.assertEqual(value["python_executable"], sys.executable)
+            self.assertEqual(value["launch_path"], os.environ.get("PATH", os.defpath))
             self.assertEqual(doc.stat().st_mode & 0o777, 0o600)
             self.assertTrue((target / ".codex/skills/doro-orchestration/scripts/bridge.py").is_file())
 

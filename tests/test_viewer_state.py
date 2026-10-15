@@ -99,3 +99,24 @@ class ViewerStateTests(unittest.TestCase):
             ack.write_text("[]")
             with self.assertRaises(DoroError):
                 wait_for_ack(receipt, timeout=0.1)
+
+    def test_window_control_requires_exact_intent_ack_and_rejects_invalid_action_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalStore(Path(tmp) / ".doro")
+            session = str(uuid4())
+            for intent, display in (("minimize", "hidden"), ("hide", "hidden")):
+                receipt = write_request(store, session, display, intent=intent)
+                self.assertEqual(json.loads(receipt.path.read_text())["intent"], intent)
+                ack = receipt.path.parent / "viewer-ack.json"
+                response = {"request_id": receipt.request_id, "display": display}
+                ack.write_text(json.dumps(response))
+                with self.assertRaisesRegex(DoroError, "window action"):
+                    wait_for_ack(receipt, timeout=0.1)
+                ack.write_text(json.dumps({**response, "intent": intent}))
+                wait_for_ack(receipt, timeout=0.1)
+            original = receipt.path.read_bytes()
+            for invalid in ("", "launch-model", "minimize; execute"):
+                with self.assertRaisesRegex(DoroError, "window action"):
+                    write_request(store, session, "panel", intent=invalid)
+                self.assertEqual(receipt.path.read_bytes(), original)
+            self.assertEqual(store.routes(), ())

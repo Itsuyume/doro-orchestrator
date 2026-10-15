@@ -88,8 +88,9 @@ struct ChatView: View {
 
     private var expandedBody: some View {
         VStack(spacing: 5) {
-            if !controller.readError.isEmpty {
-                Text(controller.readError).font(.system(size: 12)).foregroundStyle(.red)
+            if !controller.readError.isEmpty || !controller.controlError.isEmpty {
+                Text([controller.readError, controller.controlError].filter { !$0.isEmpty }.joined(separator: "\n"))
+                    .font(.system(size: 12)).foregroundStyle(.red)
                     .textSelection(.enabled).padding(8).frame(maxWidth: .infinity, alignment: .leading)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             }
@@ -106,6 +107,12 @@ struct ChatView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
+                if !controller.showingTasks {
+                    Button { controller.showTasks() } label: {
+                        Image(systemName: "chevron.left").frame(width: 26, height: 22).contentShape(Rectangle())
+                    }.buttonStyle(.plain).help("작업 목록")
+                        .accessibilityLabel("작업 목록으로 돌아가기")
+                }
                 ContextSelector(controller: controller)
                 WindowDragHandle().frame(maxWidth: .infinity).frame(height: 20)
             }
@@ -120,11 +127,13 @@ struct ChatView: View {
                 Button { controller.minimizeCurrent() } label: {
                     Image(systemName: "minus").frame(width: 26, height: 20).contentShape(Rectangle())
                 }.buttonStyle(.plain).background(.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
-                    .accessibilityLabel("작업 최소화 · 작은 스택으로 남기기").help("최소화 · 작은 스택으로 남기기")
-                Button { controller.closeStack(controller.selectedSession) } label: {
+                    .accessibilityLabel("창 최소화 · 메뉴 막대에서 다시 열기").help("최소화")
+                Button { controller.requestStop() } label: {
                     Image(systemName: "xmark").frame(width: 26, height: 20).contentShape(Rectangle())
                 }.buttonStyle(.plain).background(.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
-                    .accessibilityLabel("대화 닫기 · 작업은 계속").help("닫기 · 작업 목록에서 다시 열 수 있음")
+                    .accessibilityLabel("도로협업 종료 · 작업 기록은 유지")
+                    .help(controller.canQuit ? "종료 · 메뉴 아이콘도 닫기" : "메시지 전달 확인 중")
+                    .disabled(!controller.canQuit)
             }.font(.system(size: 11))
         }.padding(9).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }

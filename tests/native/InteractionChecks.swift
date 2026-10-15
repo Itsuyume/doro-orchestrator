@@ -32,7 +32,7 @@ struct InteractionChecks {
         controller.display = .panel
         controller.inputText = "Unsent draft"
         controller.minimizeCurrent()
-        precondition(controller.collapsed && controller.stacks.contains("A") && controller.display == .panel)
+        precondition(controller.collapsed && controller.stacks.contains("A") && controller.display == .hidden)
         controller.closeStack("A")
         precondition(!controller.stacks.contains("A") && controller.display == .hidden)
         precondition(controller.inputText == "Unsent draft" && controller.contexts[0].needs_input)
@@ -41,6 +41,32 @@ struct InteractionChecks {
         controller.openContext("A")
         precondition(!controller.collapsed && controller.stacks.contains("A") && controller.display == .panel)
         precondition(controller.inputText == "Unsent draft", "Reopening must preserve the draft")
+        var resizeRequests = 0
+        controller.onCollapse = { _ in resizeRequests += 1 }
+        controller.onStackLayout = { resizeRequests += 1 }
+        controller.showTasks()
+        controller.minimizeCurrent()
+        let minimizedRequests = resizeRequests
+        for _ in 0..<20 {
+            try controller.synchronizeStacks([context])
+            controller.minimizeCurrent()
+        }
+        precondition(resizeRequests == minimizedRequests, "Unchanged polling and repeated minimize cannot resize or animate the compact window")
+        controller.inputText = "Keep this draft"
+        controller.scrollTarget = "Earlier message"
+        controller.showTasks()
+        precondition(controller.showingTasks && !controller.collapsed)
+        controller.openContext("A")
+        precondition(!controller.showingTasks && controller.inputText == "Keep this draft"
+                     && controller.scrollTarget == "Earlier message", "Back to task list and reopen must preserve the current draft and reading position")
+        var quitRequests = 0
+        controller.onStop = { quitRequests += 1 }
+        controller.sendingSessions.insert("B")
+        controller.requestStop()
+        precondition(quitRequests == 0, "Quit cannot interrupt another task's local delivery")
+        controller.sendingSessions.remove("B")
+        controller.requestStop()
+        precondition(quitRequests == 1 && controller.contexts[0].needs_input, "Quit closes the UI while retaining work and questions")
         print("Interaction checks passed: click/drag threshold, drag reversal, minimize, hide, restore, draft preservation")
     }
 }

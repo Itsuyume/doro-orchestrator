@@ -67,7 +67,7 @@ def viewer_app(root: Path) -> Path:
 
 
 def launch_viewer(root: Path, session_id: str, config_path: Path, display: str = "panel", *,
-                  show_tasks: bool = False) -> dict[str, object]:
+                  show_tasks: bool = False, intent: str = "open") -> dict[str, object]:
     session_key(session_id)
     app = viewer_app(root)
     logs = root / ".doro/native"
@@ -86,7 +86,7 @@ def launch_viewer(root: Path, session_id: str, config_path: Path, display: str =
             raise DoroError("The local Doro v2 sprite is missing or invalid; original assets were not changed")
         env["DORO_CHAT_PET_SPRITE"] = str(sprite)
     with viewer_lock(root) as lock:
-        request = write_request(store, session_id, display, show_tasks=show_tasks)
+        request = write_request(store, session_id, display, show_tasks=show_tasks, intent=intent)
         env["DORO_CHAT_REQUEST"] = str(request.path)
         if lock is None:
             wait_for_ack(request)

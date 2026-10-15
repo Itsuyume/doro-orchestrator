@@ -10,8 +10,10 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var wasCollapsed = false
     private var wasShowingTasks = false
     private var approvalWindow: ApprovalWindow?
-    private var statusItem: NSStatusItem?
+    private var menuBar: MenuBarControl?
     private var panelDragging: PanelDragGesture?
+    private var shortcut: GlobalShortcut?
+    private var waitingForMenu = false
 
     init(command: [String]) throws {
         guard let request = ProcessInfo.processInfo.environment["DORO_CHAT_REQUEST"] else {
@@ -24,7 +26,14 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenu()
-        installStatusMenu()
+        menuBar = MenuBarControl(onToggle: { [weak self] in self?.togglePanel() },
+            onOpen: { [weak self] in self?.openTasks() }, onHide: { [weak self] in self?.controller.hidePanel() },
+            canQuit: { [weak self] in self?.controller.canQuit ?? false },
+            onQuit: { [weak self] in self?.controller.requestStop() })
+        menuBar?.onReady = { [weak self] in
+            guard let self, self.waitingForMenu else { return }
+            self.show(self.controller.display)
+        }
         let window = ConversationPanel(contentRect: NSRect(x: 0, y: 0, width: 390, height: 590),
                               styleMask: [.borderless, .resizable, .nonactivatingPanel],
                               backing: .buffered, defer: false)
@@ -36,6 +45,7 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.isMovableByWindowBackground = false
         window.minSize = NSSize(width: 320, height: 400)
         let host = NSHostingView(rootView: ChatView(controller: controller))
+        host.sizingOptions = []
         window.contentView = host
         panelDragging = PanelDragGesture(window: window, view: host)
         window.level = .floating
@@ -48,7 +58,11 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         self.window = window
         approvalWindow = ApprovalWindow(controller: controller)
-        controller.onApprovalChange = { [weak self] in self?.approvalWindow?.update(anchor: self?.window) }
+        controller.onApprovalChange = { [weak self] in
+            guard let self else { return }
+            self.approvalWindow?.update(anchor: self.window)
+            self.menuBar?.update(approvals: self.controller.approvalCount)
+        }
         controller.onApprovalOpen = { [weak self] in self?.approvalWindow?.focusCurrent() }
         controller.onCollapse = { [weak self] collapsed in self?.resize(collapsed: collapsed) }
         controller.onStackLayout = { [weak self] in
@@ -57,6 +71,10 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         controller.onDisplay = { [weak self] display in self?.show(display) }
         controller.onStop = { NSApp.terminate(nil) }
+        do { shortcut = try GlobalShortcut { [weak self] in self?.openTasks() } }
+        catch { controller.shortcutError = error.localizedDescription }
+        NotificationCenter.default.addObserver(self, selector: #selector(screenLayoutChanged),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
         controller.start()
     }
 
@@ -82,41 +100,50 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func show(_ display: ViewerDisplay) {
         guard let window else { return }
         approvalWindow?.update(anchor: window)
-        if display == .hidden || display == .stop { window.orderOut(nil); return }
+        if display == .hidden || display == .stop { waitingForMenu = false; window.orderOut(nil); return }
+        if display == .panel, !placeAtMenuBar() {
+            if waitingForMenu { return }
+            waitingForMenu = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(750)) { [weak self] in
+                guard let self, self.waitingForMenu, let window = self.window else { return }
+                _ = self.placeAtMenuBar()
+                self.waitingForMenu = false
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            return
+        }
+        waitingForMenu = false
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func installStatusMenu() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "bubble.left", accessibilityDescription: "도로 대화")
-        item.button?.toolTip = "도로 대화"
-        let menu = NSMenu()
-        for (title, action) in [("대화 열기", #selector(openChat)), ("작업 목록", #selector(openTasks))] {
-            let entry = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
-            entry.target = self
-        }
-        menu.addItem(.separator())
-        let quit = menu.addItem(withTitle: "종료", action: #selector(returnOrQuit), keyEquivalent: "")
-        quit.target = self
-        item.menu = menu
-        statusItem = item
+    private func togglePanel() {
+        if controller.display == .hidden { openTasks() }
+        else { controller.hidePanel() }
     }
 
-    @objc private func openChat() { controller.openContext(controller.selectedSession) }
-    @objc private func openTasks() { controller.showTasks() }
+    @discardableResult private func placeAtMenuBar() -> Bool {
+        guard let window, let menuBar, controller.display == .panel else { return false }
+        do { try menuBar.place(window); controller.placementError = ""; return true }
+        catch { controller.placementError = error.localizedDescription; return false }
+    }
+
+    @objc private func openTasks() { controller.showTasks(); placeAtMenuBar() }
+    @objc private func screenLayoutChanged() { placeAtMenuBar() }
 
     @objc private func returnOrQuit() {
         if controller.display == .integrated { controller.requestOfficialPet() }
-        else { NSApp.terminate(nil) }
+        else { controller.requestStop() }
     }
 
     private func resize(collapsed: Bool) {
         guard let window else { return }
         let previous = window.frame
         let visible = window.screen?.visibleFrame ?? previous
+        let changedCollapse = collapsed != wasCollapsed
         let tasks = !collapsed && controller.showingTasks
-        let anchorTop = tasks && wasShowingTasks && !wasCollapsed
+        let anchorTop = controller.display == .panel || (tasks && wasShowingTasks && !wasCollapsed)
         if !wasCollapsed && !wasShowingTasks { expandedSize = previous.size }
         wasCollapsed = collapsed
         wasShowingTasks = controller.showingTasks
@@ -130,17 +157,21 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let point = NSPoint(x: previous.maxX - width, y: anchorTop ? previous.maxY - height : previous.minY)
         let origin = clampedPanelOrigin(point, size: NSSize(width: width, height: height), visible: visible)
         let target = NSRect(origin: origin, size: NSSize(width: width, height: height))
-        if target != previous { window.setFrame(target, display: true, animate: true) }
+        if target != previous { window.setFrame(target, display: true, animate: changedCollapse && controller.display == .integrated) }
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        controller.closeStack(controller.selectedSession)
+        controller.requestStop()
         return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        shortcut?.stop()
+        menuBar?.stop()
+        NotificationCenter.default.removeObserver(self)
         controller.stop()
     }
+
 }
 
 let command = Array(CommandLine.arguments.dropFirst())

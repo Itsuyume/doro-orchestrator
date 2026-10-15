@@ -1,7 +1,9 @@
 """Install one verified local workflow without overwriting another skill or account config."""
 import json
+import os
 from pathlib import Path
 import shutil
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAME = "doro-orchestration"
@@ -32,7 +34,8 @@ def install(user_directory: Path, project: Path = ROOT) -> tuple[Path, Path]:
     path.write_text(json.dumps({"version": 1, "project_root": str(project), "skill_root": str(destination),
                                "trigger": "explicit user request during project work",
                                "main": "current GPT Work chat", "external": ["claude"],
-                               "agy_enabled": False}, ensure_ascii=False, indent=2) + "\n")
+                               "agy_enabled": False, "python_executable": sys.executable,
+                               "launch_path": os.environ.get("PATH", os.defpath)}, ensure_ascii=False, indent=2) + "\n")
     path.chmod(0o600)
     return destination, path
 

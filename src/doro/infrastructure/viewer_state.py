@@ -19,6 +19,7 @@ class ViewerReceipt:
     path: Path
     request_id: str
     display: str
+    intent: str = "open"
 
 
 def window_target(store: LocalStore, explicit: str | None = None) -> tuple[str, bool]:
@@ -34,16 +35,19 @@ def window_target(store: LocalStore, explicit: str | None = None) -> tuple[str, 
     return routes[-1].session_id, True
 
 
-def write_request(store: LocalStore, session_id: str, display: str, *, show_tasks: bool = False) -> ViewerReceipt:
+def write_request(store: LocalStore, session_id: str, display: str, *, show_tasks: bool = False,
+                  intent: str = "open") -> ViewerReceipt:
     session_key(session_id)
     if display not in {"integrated", "panel", "hidden", "stop"}:
         raise DoroError("Unknown local viewer display mode")
+    if intent not in {"open", "minimize", "hide"}:
+        raise DoroError("Unknown local window action")
     directory = store.root / "native"
     private_directory(directory)
     inputs = LocalInputStore(store)
     tokens = {route.session_id: inputs.register_ui(route.session_id) for route in store.routes()}
     packet = {"version": 1, "request_id": str(uuid4()), "session_id": session_id,
-              "display": display, "tokens": tokens, "show_tasks": show_tasks}
+              "display": display, "tokens": tokens, "show_tasks": show_tasks, "intent": intent}
     path = directory / "viewer-request.json"
     if path.is_symlink():
         raise DoroError("Viewer request symlinks are not allowed")
@@ -52,7 +56,7 @@ def write_request(store: LocalStore, session_id: str, display: str, *, show_task
     with os.fdopen(descriptor, "w") as output:
         json.dump(packet, output)
     os.replace(temporary, path)
-    return ViewerReceipt(path, str(packet["request_id"]), display)
+    return ViewerReceipt(path, str(packet["request_id"]), display, intent)
 
 
 def acknowledged(path: Path, receipt: ViewerReceipt) -> bool:
@@ -63,11 +67,13 @@ def acknowledged(path: Path, receipt: ViewerReceipt) -> bool:
     if path.stat().st_size > 2000:
         raise DoroError("Viewer acknowledgement is too large")
     packet = mapping(json.loads(path.read_text()), "viewer acknowledgement")
-    keys(packet, {"request_id", "display"}, "viewer acknowledgement")
+    keys(packet, {"request_id", "display"} | ({"intent"} if "intent" in packet else set()), "viewer acknowledgement")
     if string(packet["request_id"], "request ID") != receipt.request_id:
         return False
     if string(packet["display"], "display") != receipt.display:
         raise DoroError("The viewer acknowledged a different display mode")
+    if packet.get("intent", "open") != receipt.intent:
+        raise DoroError("The viewer did not confirm the requested window action")
     return True
 
 

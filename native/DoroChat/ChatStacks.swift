@@ -26,18 +26,26 @@ extension ChatController {
 
     func minimizeCurrent() {
         if !showingTasks { stacks.open(selectedSession) }
+        if display == .panel { hidePanel() }
         collapsed = true
+    }
+
+    func hidePanel() {
+        display = .hidden
+        approvals.dismiss()
+        onDisplay?(.hidden)
+    }
+
+    func requestStop() {
+        guard canQuit else { readError = "메시지 전달을 확인한 뒤 종료해줘도로."; return }
+        onStop?()
     }
 
     func closeStack(_ id: String) {
         stacks.close(id)
         if id == selectedSession { collapsed = true }
         else { onStackLayout?() }
-        if pinnedContexts.isEmpty && display == .panel {
-            display = .hidden
-            approvals.dismiss()
-            onDisplay?(.hidden)
-        }
+        if display == .panel && (id == selectedSession || pinnedContexts.isEmpty) { hidePanel() }
     }
 
     func toggleChat() {
@@ -46,6 +54,7 @@ extension ChatController {
         else if let first = pinnedContexts.first { openContext(first.id); return }
         else { showingTasks = true }
         collapsed = false
+        revealPanel()
     }
 
     func showTasks() { showingTasks = true; collapsed = false; revealPanel() }
@@ -67,6 +76,6 @@ extension ChatController {
         }
         stacks = next
         lastRemoved = undo
-        if previous != pinnedContexts.count || showingTasks { onStackLayout?() }
+        if previous != pinnedContexts.count { onStackLayout?() }
     }
 }

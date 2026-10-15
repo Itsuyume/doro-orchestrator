@@ -8,16 +8,23 @@ final class ChatController: ObservableObject {
     @Published var selectedSession: String
     @Published var display = ViewerDisplay.hidden
     @Published var readError = ""
+    @Published var shortcutError = ""
+    @Published var placementError = ""
+    var controlError: String { [shortcutError, placementError].filter { !$0.isEmpty }.joined(separator: "\n") }
     @Published var followLatest = true
     @Published var expandedMessages: Set<String> = []
     @Published var scrollTarget: String?
     private(set) var requestedScrollTarget: String?
     @Published var collapsed = false {
-        didSet { if collapsed { approvals.dismiss() }; onCollapse?(collapsed) }
+        didSet {
+            guard oldValue != collapsed else { return }
+            if collapsed { approvals.dismiss() }
+            onCollapse?(collapsed)
+        }
     }
     @Published var stacks = StackCatalog()
-    @Published var showingTasks = false { didSet { onStackLayout?() } }
-    @Published var historyExpanded = false { didSet { onStackLayout?() } }
+    @Published var showingTasks = false { didSet { if oldValue != showingTasks { onStackLayout?() } } }
+    @Published var historyExpanded = false { didSet { if oldValue != historyExpanded { onStackLayout?() } } }
     @Published var lastRemoved: Set<String> = []
     @Published var taskContentHeight = 0.0 { didSet { if abs(oldValue - taskContentHeight) > 1 { onStackLayout?() } } }
     let saveHistory: (StackHistorySnapshot) throws -> Void
@@ -49,6 +56,7 @@ final class ChatController: ObservableObject {
     private var requestID = ""
     private var generation = 0
     var sending: Bool { sendingSessions.contains(selectedSession) }
+    var canQuit: Bool { sendingSessions.isEmpty }
     var approvalCount: Int { contexts.filter(\.needs_input).count }
     var currentLabel: String { contexts.first { $0.id == selectedSession }?.label ?? "도로 협업" }
 
@@ -107,6 +115,14 @@ final class ChatController: ObservableObject {
         if request.display == .stop && !sendingSessions.isEmpty { return }
         requestID = request.request_id
         capabilities = request.tokens
+        if let intent = request.intent, intent != .open {
+            display = .hidden
+            approvals.dismiss()
+            if intent == .minimize { collapsed = true }
+            onDisplay?(display)
+            try acknowledgeViewerRequest(request)
+            return
+        }
         if request.display == .integrated || request.display == .panel {
             if request.show_tasks != true { stacks.open(request.session_id) }
             showingTasks = request.show_tasks ?? false

@@ -4,20 +4,16 @@ struct StackHistoryStore {
     let path: URL
 
     func load() throws -> StackHistorySnapshot {
-        guard FileManager.default.fileExists(atPath: path.path) else { return StackHistorySnapshot() }
-        try validateFile()
-        let value = try JSONDecoder().decode(StackHistorySnapshot.self, from: Data(contentsOf: path))
+        guard let data = try NativeStateFile(path: path, maxBytes: 200_000).read() else { return StackHistorySnapshot() }
+        let value = try JSONDecoder().decode(StackHistorySnapshot.self, from: data)
         try validateSnapshot(value)
         return value
     }
 
     func save(_ history: StackHistorySnapshot) throws {
         try validateSnapshot(history)
-        if FileManager.default.fileExists(atPath: path.path) { try validateFile() }
         let data = try JSONEncoder().encode(history)
-        guard data.count <= 200_000 else { throw ChatReadError.failed("목록 저장 크기를 초과했도로.") }
-        try data.write(to: path, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
+        try NativeStateFile(path: path, maxBytes: 200_000).write(data)
     }
 
     private func validateSnapshot(_ value: StackHistorySnapshot) throws {
@@ -27,11 +23,4 @@ struct StackHistoryStore {
         }
     }
 
-    private func validateFile() throws {
-        let attributes = try FileManager.default.attributesOfItem(atPath: path.path)
-        guard attributes[.type] as? FileAttributeType == .typeRegular,
-              let size = attributes[.size] as? NSNumber, size.intValue <= 200_000 else {
-            throw ChatReadError.failed("목록 저장 파일이 일반 파일이 아니거나 너무 크도로.")
-        }
-    }
 }
