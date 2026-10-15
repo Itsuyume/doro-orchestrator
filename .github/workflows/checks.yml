@@ -13,6 +13,7 @@ jobs:
       - run: python -m pip install ruff==0.17.0 mypy==2.4.0
       - run: ruff check .
       - run: mypy
+      - run: MYPYPATH=tools/cursor_cleanup mypy --strict tools/cursor_cleanup/lifecycle.py tools/cursor_cleanup/ledger.py tools/install_cursor_cleanup.py
       - run: python tools/check_architecture.py
       - run: PYTHONPATH=src python -m unittest discover -s tests -v
   native-chat:
@@ -30,3 +31,4 @@ jobs:
       - run: /tmp/doro-submission-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors $(find native/DoroChat -name '*.swift' ! -name 'main.swift') tests/native/InteractionChecks.swift -o /tmp/doro-interaction-check
       - run: /tmp/doro-interaction-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors tools/cursor_cleanup/inspector.swift -o /tmp/doro-cursor-inspector
