@@ -10,11 +10,13 @@ from uuid import uuid4
 from doro.application.orchestrator import Orchestrator, public_error, validate_session
 from doro.domain.models import Config, DoroError, Session
 from doro.domain.policy import ensure_public, plan_turns
-from doro.domain.validation import parse_task
 from doro.infrastructure.config import load_config
 from doro.infrastructure.diagnostics import doctor, require_auth
 from doro.infrastructure.providers import CliRunner
 from doro.infrastructure.storage import LocalStore
+from doro.interface.input import load_task
+from doro.interface.work_cli import add_work_parser, run_work
+from doro.interface.dashboard import serve_progress
 
 
 def parser(root: Path) -> argparse.ArgumentParser:
@@ -22,6 +24,9 @@ def parser(root: Path) -> argparse.ArgumentParser:
     result.add_argument("--config", type=Path, default=root / "orchestrator.toml")
     commands = result.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="Local version/auth checks; never probes disabled participants")
+    add_work_parser(commands)
+    watch = commands.add_parser("watch", help="Open a read-only local progress view for one session")
+    watch.add_argument("session_id")
     for name in ("plan", "run"):
         task = commands.add_parser(name)
         task.add_argument("--task", type=Path, required=True)
@@ -40,9 +45,7 @@ def output(value: object) -> None:
 
 
 def prepare(config: Config, path: Path) -> Session:
-    if path.is_symlink() or path.stat().st_size > config.limits.max_prompt_chars * 4:
-        raise DoroError("Task must be a regular bounded file, without symlinks")
-    task = parse_task(json.loads(path.read_text()))
+    task = load_task(config, path)
     session = Session(str(uuid4()), task, config.fingerprint,
                       config.participants(), config.limits.debate_rounds)
     validate_session(config, session)
@@ -74,8 +77,15 @@ def execute_session(config: Config, store: LocalStore, session: Session) -> None
 
 def dispatch(args: argparse.Namespace, root: Path) -> None:
     config = load_config(args.config, root / "roles")
+    if args.command == "work":
+        output(run_work(args, config, root))
+        return
+    if args.command == "watch":
+        serve_progress(config, LocalStore(root / ".doro"), args.session_id, root / "ui")
+        return
     if args.command == "doctor":
-        output({"providers": doctor(config), "pet_bridge": "not connected",
+        output({"providers": doctor(config),
+                "pet_bridge": "On-request GPT Work skill supported; native popup visibility is managed by the app",
                 "configuration": str(args.config)})
         return
     if args.command in ("plan", "run"):

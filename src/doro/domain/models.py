@@ -91,3 +91,4 @@ class Session:
     seconds_used: float = 0.0
     status: str = "ready"
     error: str = ""
+    mode: str = "cli"

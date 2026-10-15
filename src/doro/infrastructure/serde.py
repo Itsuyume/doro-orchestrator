@@ -21,6 +21,8 @@ def decode_turn(value: object) -> Turn:
 
 def decode_session(raw: str) -> Session:
     data = mapping(json.loads(raw), "session")
+    if set(data) == set(Session.__dataclass_fields__) - {"mode"}:
+        data["mode"] = "cli"  # Read the original version-1 CLI record without rewriting it.
     keys(data, set(Session.__dataclass_fields__), "session")
     turns = data["turns"]
     if not isinstance(turns, list):
@@ -38,7 +40,11 @@ def decode_session(raw: str) -> Session:
         number(data["claude_reserved_usd"], "claude_reserved_usd"),
         number(data["seconds_used"], "seconds_used"),
         string(data["status"], "status"), string(data["error"], "error", empty=True),
+        string(data["mode"], "mode"),
     )
-    if session.status not in {"ready", "running", "failed", "interrupted", "completed"}:
+    if session.mode not in {"cli", "work"}:
+        raise DoroError("Invalid stored session mode")
+    if session.status not in {"ready", "running", "failed", "interrupted", "completed",
+                              "awaiting_claude", "awaiting_work"}:
         raise DoroError("Invalid stored session status")
     return session

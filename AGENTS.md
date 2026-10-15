@@ -2,6 +2,8 @@
 
 GPT가 본작업과 최종 판단을 책임진다. Claude는 검토·반론·보완, AGY는 일반 아이디어·부분 검토 담당이다. AGY의 기본값은 false이며 꺼진 상태에서 버전·인증·모델 목록·실행을 포함한 모든 프로브를 금지한다.
 
+Work 모드는 현재 프로젝트의 GPT Work가 주인이다. 사용자의 명시적 협업 요청 때만 설치된 `doro-orchestration` 스킬로 시작한다. 일반 작업·질문·펫 표시·상태 확인은 모델을 호출하지 않는다. Work 모드에서 Codex CLI를 다시 실행하거나 메인 역할을 넘기지 않는다. 외부 턴 실행·장부는 CLI 모드와 `application/turn_executor.py`를 공유한다. 기존 CLI 명령과 세션 기록은 보존한다.
+
 작업 전 Git 상태와 필요한 최소 파일을 확인한다. 기존 사용자 변경과 public CLI 이름, 출력·설정 경로를 보존한다. 공용 타입은 `domain/models.py`, 입력 검증은 `domain/validation.py`, 전달·호출 정책은 `domain/policy.py`가 단일 출처다. 새 도우미를 만들기 전에 이 파일을 확인한다.
 
 `domain`은 다른 레이어에 의존하지 않는다. `application`은 domain과 자체 포트에만 의존한다. `infrastructure`는 domain과 자체 모듈에만 의존한다. `interface`가 실제 구성요소를 조립한다. 순환 의존성과 재수출은 금지한다.

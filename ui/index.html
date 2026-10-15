@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>도로 · 협업 진행</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><p class="eyebrow">도로 · 프로젝트 협업</p><h1>검토와 보완, 한곳에서</h1>
+      <p class="intro" id="owner">네가 요청할 때 시작하고, GPT Work가 최종 판단을 맡아.</p></header>
+    <section aria-labelledby="state-title" class="state">
+      <h2 id="state-title">현재 진행</h2><p id="current" role="status" aria-live="polite">작업을 불러오는 중</p>
+      <dl class="metrics"><div><dt>Claude 호출</dt><dd id="calls">—</dd></div>
+        <div><dt>Claude 추정 비용</dt><dd id="cost">—</dd></div>
+        <div><dt>AGY</dt><dd id="agy">꺼짐</dd></div></dl>
+    </section>
+    <section aria-labelledby="task-title"><h2 id="task-title">이번 요청</h2><p id="task"></p></section>
+    <section aria-labelledby="flow-title"><h2 id="flow-title">협업 흐름</h2>
+      <ol class="flow" id="flow"><li data-phase="draft">GPT Work 초안</li><li data-phase="review">Claude 검토</li><li data-phase="rebuttal">GPT Work 보완</li><li data-phase="recheck">Claude 재검토</li><li data-phase="final">GPT Work 최종 판단</li></ol>
+    </section>
+    <section aria-labelledby="history-title"><div class="section-heading"><h2 id="history-title">발언과 반론</h2><span id="turns"></span></div><div id="history"></div></section>
+    <p id="error" role="alert" hidden></p>
+    <footer><span id="freshness">연결 확인 중</span><span>이 Mac에서만 표시 · 읽기 전용</span></footer>
+  </main>
+</body>
+</html>

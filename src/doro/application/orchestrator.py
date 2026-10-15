@@ -1,11 +1,10 @@
 import re
-import time
 from typing import Callable
 
 from doro.application.ports import Runner, Store
-from doro.application.prompts import build_prompt
-from doro.domain.models import Config, DoroError, PlannedTurn, Session, Turn
-from doro.domain.policy import SENSITIVE, allow_call, ensure_public, plan_turns
+from doro.application.turn_executor import TurnExecutor
+from doro.domain.models import Config, DoroError, PlannedTurn, Session
+from doro.domain.policy import SENSITIVE, ensure_public, plan_turns
 
 
 def public_error(error: BaseException) -> str:
@@ -16,6 +15,8 @@ def public_error(error: BaseException) -> str:
 
 
 def validate_session(config: Config, session: Session) -> tuple[PlannedTurn, ...]:
+    if session.mode != "cli":
+        raise DoroError("This session belongs to the current GPT Work chat; use work commands")
     if session.config_fingerprint != config.fingerprint:
         raise DoroError("Configuration changed; existing session cannot silently change roles or limits")
     if session.participants != config.participants() or session.rounds != config.limits.debate_rounds:
@@ -40,34 +41,7 @@ class Orchestrator:
                  notify: Callable[[str], None]) -> None:
         self.config = config
         self.store = store
-        self.runner = runner
-        self.notify = notify
-
-    def perform(self, session: Session, turn: PlannedTurn) -> None:
-        allow_call(self.config, session, turn.provider)
-        prompt = build_prompt(session, turn, self.config.roles[turn.provider], self.config.limits.max_prompt_chars)
-        self.store.reserve(session, self.config, turn.provider)
-        self.notify(f"{session.id}: {turn.provider} / {turn.phase}")
-        timeout = min(self.config.limits.timeout_seconds,
-                      self.config.limits.session_seconds - session.seconds_used)
-        started = time.monotonic()
-        try:
-            reply = self.runner.call(turn.provider, prompt, self.store.workspace(session.id), timeout)
-            session.tokens_used += reply.tokens
-            if reply.cost_usd is not None:
-                session.reported_usd += reply.cost_usd
-            if session.tokens_used > self.config.limits.max_tokens:
-                raise DoroError("Reported token limit exceeded; stop before forwarding")
-            if session.reported_usd > self.config.limits.session_reported_usd:
-                raise DoroError("Reported cost limit exceeded; stop before forwarding")
-            if len(reply.text) > self.config.limits.max_response_chars:
-                raise DoroError("Response limit exceeded; nothing was truncated or forwarded")
-            ensure_public(reply.text)
-            session.turns.append(Turn(turn.provider, turn.phase, reply.text, reply.tokens,
-                                      reply.cost_usd, reply.native_session_id))
-        finally:
-            session.seconds_used += time.monotonic() - started
-            self.store.save(session)
+        self.executor = TurnExecutor(config, store, runner, notify)
 
     def run(self, session: Session) -> Session:
         with self.store.lock(session.id):
@@ -75,7 +49,7 @@ class Orchestrator:
             try:
                 plan = validate_session(self.config, session)
                 for turn in plan[len(session.turns):]:
-                    self.perform(session, turn)
+                    self.executor.perform(session, turn)
                 session.status = "completed"
                 session.error = ""
                 self.store.save(session)
