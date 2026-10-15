@@ -1,12 +1,26 @@
 from dataclasses import asdict
 import json
 
-from doro.domain.models import Checkpoint, DoroError, Exchange, Session, Turn
-from doro.domain.validation import integer, keys, mapping, number, parse_task, string, strings
+from doro.domain.models import ApprovalReceipt, Checkpoint, DoroError, Exchange, Session, Turn
+from doro.domain.validation import boolean, integer, keys, mapping, number, parse_task, string, strings
 
 
 def encode_session(session: Session) -> str:
     return json.dumps(asdict(session), ensure_ascii=False, allow_nan=False)
+
+
+def encode_receipt(receipt: ApprovalReceipt) -> str:
+    return json.dumps(asdict(receipt), ensure_ascii=False, allow_nan=False)
+
+
+def decode_receipt(raw: str) -> ApprovalReceipt:
+    data = mapping(json.loads(raw), "approval receipt")
+    keys(data, set(ApprovalReceipt.__dataclass_fields__), "approval receipt")
+    return ApprovalReceipt(string(data["id"], "id"), string(data["session_id"], "session_id"),
+                           string(data["checkpoint_id"], "checkpoint_id"),
+                           string(data["owner_thread_id"], "owner_thread_id"),
+                           string(data["decision"], "decision"), string(data["answer"], "answer"),
+                           boolean(data["delivered"], "delivered"))
 
 
 def decode_turn(value: object) -> Turn:
@@ -49,8 +63,10 @@ def decode_session(raw: str) -> Session:
     if session.mode not in {"cli", "work"}:
         raise DoroError("Invalid stored session mode")
     if session.status not in {"ready", "running", "failed", "interrupted", "completed",
-                              "awaiting_claude", "awaiting_work", "awaiting_approval", "awaiting_direction"}:
+                              "awaiting_claude", "awaiting_work", "awaiting_approval", "awaiting_direction", "cancelled"}:
         raise DoroError("Invalid stored session status")
+    if session.status == "awaiting_approval" and (not session.checkpoints or session.checkpoints[-1].decision != "pending"):
+        raise DoroError("Invalid stored approval wait: no unanswered checkpoint")
     return session
 
 

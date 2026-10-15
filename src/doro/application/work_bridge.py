@@ -18,13 +18,13 @@ class WorkBridge:
         self.executor = TurnExecutor(config, store, runner, notify)
         self.check_ready = check_ready
 
-    def start(self, task: Task, draft: str) -> Session:
+    def start(self, task: Task, draft: str, scope: str = "") -> Session:
         session = Session(str(uuid4()), task, self.config.fingerprint, ("work", "claude"),
                           self.config.limits.debate_rounds, mode="work")
         session.turns.append(work_text(self.config, draft, "draft"))
         validate_work(self.config, session)
         session.status = "awaiting_claude"
-        request_checkpoint(session, "start", start_summary(self.config, session))
+        request_checkpoint(session, "start", scope or start_summary(self.config, session))
         self.store.save(session)
         self.store.export(session)
         return session
@@ -94,6 +94,17 @@ class WorkBridge:
             session = self.store.load(session_id)
             validate_work(self.config, session)
             decide_checkpoint(session, checkpoint_id, decision)
+            self.store.save(session)
+            self.store.export(session)
+            return session
+
+    def cancel(self, session_id: str) -> Session:
+        with self.store.lock(session_id):
+            session = self.store.load(session_id)
+            validate_work(self.config, session)
+            if session.status in {"running", "completed"}:
+                raise DoroError("A running turn must first be interrupted; a completed result cannot be cancelled")
+            session.status, session.error = "cancelled", ""
             self.store.save(session)
             self.store.export(session)
             return session

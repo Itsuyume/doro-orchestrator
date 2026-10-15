@@ -6,6 +6,24 @@ class DoroError(Exception):
 
 
 @dataclass(frozen=True)
+class OwnerRoute:
+    session_id: str
+    thread_id: str
+    label: str
+
+
+@dataclass(frozen=True)
+class ApprovalReceipt:
+    id: str
+    session_id: str
+    checkpoint_id: str
+    owner_thread_id: str
+    decision: str
+    answer: str
+    delivered: bool = False
+
+
+@dataclass(frozen=True)
 class Task:
     message: str
     classification: str

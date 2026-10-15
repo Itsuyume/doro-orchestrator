@@ -29,9 +29,30 @@ Work 협업은 **시작 범위·중요 분기·실제 파일 반영 전**에 사
 
 중요 분기의 의미를 판단하고 필요한 체크포인트를 여는 일은 현재 Work의 책임이다. `work finish`는 최종 발언만 기록한다. 실행기는 프로젝트 파일을 수정하지 않으며, 실제 파일 반영 승인과 반영·검증은 현재 Work가 책임진다. 따라서 실행기가 현재 Work의 모든 파일 접근을 운영체제 수준에서 차단한다고 보장하지 않는다.
 
-`doro watch <UUID>`는 해당 세션 하나만 보여주는 읽기 전용 상태판 URL을 출력한다. 전송 전 입력, 실제 전송한 전체 입력, 생성 중인 Claude 공개 응답, 완료된 발언·반론, 승인 이력·호출·Claude 추정 비용·AGY 상태가 1초 간격으로 갱신된다. CLI의 `stream-json` 텍스트 이벤트만 받으며 내부 사고 과정이나 원시 메타데이터는 표시·저장하지 않는다. 오류로 끝난 부분 응답은 실패로 표시하고 다음 참가자에게 전달하지 않는다. 공개 여부와 크기 검사는 응답이 저장되기 전과 최종 수신 때 적용한다. 인식하지 못하는 개인정보까지 모두 판별하는 분류기는 아니다.
+진행은 **현재 Work 대화와 앱 펫의 활동 카드**를 사용한다. 현재 Work가 각 단계에서 제공되는 `activity_title`로 해당 대화 제목을 갱신한다. 예를 들어 “Claude 검토 중”, “도로 반론·보완 중”, “시작 범위 승인 대기”를 카드 첫줄에서 구별할 수 있다. 짧은 제목에 작업 본문·파일명·개인 경로를 넣지 않는다. 이 기능은 지원되는 `set_thread_title` 도구를 쓰며, 임의의 펫 말풍선 UI를 수정하는 API가 아니다. 실제 펫 표시는 앱에서 확인해야 한다.
 
-토큰은 URL fragment로 한 번 전달한 뒤 브라우저 세션에 보관하고 API 헤더에서 확인한다. 서버는 loopback에만 열며 외부 Origin·변조 Host·임의 파일 경로를 거부한다. 모델 출력은 실행 가능한 HTML로 해석하지 않고 텍스트로 표시한다. 브라우저에서 승인이나 파일 반영 명령을 받지 않는다. 질문과 승인 답은 현재 Work 대화에서 주고받는다. Work의 최종안 기록 뒤에도 3초 간격으로 조회해 이후의 파일 반영 승인 대기를 표시한다. CLI 모드는 완료 후 갱신을 멈춘다. 서버는 요청이 3분 동안 없으면 종료한다. 저장된 대화·입출력·승인 기록은 남는다.
+웹 표시 기능은 제거했다. 기존 `watch` 명령은 이름을 유지하되 로컬 텍스트 출력으로 바뀌었다. HTTP 서버·보기 URL·브라우저 실행·원문 웹 페이지를 만들지 않는다. `./doro watch <UUID> --once`는 단계·발언 수·호출 수만 읽는다. 입력·응답 본문은 기본 진행 출력에 포함하지 않는다. 전체 기록과 Claude의 스트리밍 공개 답변은 로컬 장부에 보존하고 사용자가 원할 때 현재 Work에서 확인한다. 내부 사고 과정·원시 메타데이터는 표시·저장하지 않는다. 실패한 부분 응답은 다음 참가자에게 전달하지 않는다.
+
+### 펫에서 답변하고 원래 협업으로 이어가기
+
+프로젝트 Work는 시작할 때 현재 `CODEX_THREAD_ID`를 확인해 소유자로 등록한다. 펫 Quick Chat은 별도 대화여도 같은 Mac의 등록된 협업으로 답을 전달한다.
+
+```bash
+./doro work start --task work/task.json --draft work/draft.txt --owner-thread <소유-Work-ID> --label "짧은 협업명"
+./doro approvals pending
+./doro approvals sessions
+./doro approvals respond <UUID> --checkpoint <현재-질문-ID> --decision approve --answer work/answer.txt
+./doro approvals receipt <응답-ID>
+./doro approvals ack <응답-ID>
+```
+
+펫 입력창에 “도로 협업 진행 상황”, “그 검토 승인해”, “도로 협업 보류”처럼 요청한다. 필요한 경우 `$doro-orchestration`을 명시한다. 스킬은 등록된 세션의 메타데이터만 찾고, 대기가 여러 개면 협업명을 확인한다. 이전 대화 내용을 자동 수집하지 않는다. 승인할 범위가 아직 분명하지 않으면 펫 대화에서 해당 범위를 확인한다.
+
+`respond`는 실제 사람의 답과 승인 결정을 같은 SQLite 트랜잭션으로 저장한다. 모델·브라우저·메시지를 자동 실행하지 않는다. 현재 사용자가 그 협업으로 답을 전달하라고 직접 요청한 경우에만, 신뢰되는 Work가 지원되는 `send_message_to_thread`로 등록된 소유 대화에 응답 기록을 전달한다. 사용자에게 기존 세션으로 이동하라고 요구하지 않는다. 전송 성공 뒤에만 `ack`를 기록하며, 전송 실패·불확실 때는 자동 재전송하지 않는다. `outbox`는 명시적 재전달 요청에 사용한다. 소유자는 다른 대화로 재등록할 수 없고, 오래된 질문·중복 응답은 거부한다.
+
+이 경로는 도로 협업의 범위 승인·방향 선택·답변 전달을 위한 것이다. 앱 자체의 도구 권한·보안 승인을 우회하지 않는다. 저장 파일이나 AI 발언만으로 사람이 승인했다고 취급하지 않는다. 사람 신원을 별도로 인증하는 서버는 없으며, 현재 Work가 실제 사용자 입력과 올바른 목적지를 확인해야 한다.
+
+`work cancel <UUID>`는 실행 중이 아닌 협업을 닫는다. 닫힌 세션은 모델 호출이나 새 승인으로 재개할 수 없다. 실행 중인 CLI는 먼저 현재 Work에서 중단해야 한다. `--scope <파일>`은 시작할 때 승인 범위를 구체적으로 표시하기 위한 선택 사항이다. 로컬 표시·답변 경로만 시험할 경우 외부 호출이 없음을 명시하고 시험 뒤 닫는다.
 
 ## 실행
 
@@ -90,7 +111,7 @@ Codex는 전역 설정을 무시하고 read-only 권한으로 실행한다. 쉘�
 
 AGY는 현재 호출하지 않는다. `enabled = false`는 탐지·인증·실행보다 먼저 검사한다. AGY의 CLI 설치·모델 접근·권한 계약과 실제 응답은 검증하지 않았다. IDE가 설치되어 있어도 CLI가 있다는 뜻은 아니다. 향후 AGY를 사용할 때는 인증·권한 확인을 먼저 구현·검증해야 하며, 현재 진단은 AGY 활성화 시 준비되지 않았다는 오류로 중단한다. `enabled`를 바꾸는 것만으로 동작을 보장하지 않는다.
 
-펫의 입력·음성·활동 표시는 ChatGPT의 기본 인터페이스를 사용한다. 프로젝트 Work 대화에 설치된 스킬이 현재 GPT와 Claude CLI를 연결하고, commentary와 상태판이 진행을 보여준다. Show pet은 앱의 `/pet` 또는 macOS 기본 Option+Space로 표시한다. 펫 Quick Chat은 프로젝트 밖에서 시작하므로 프로젝트 문맥을 유지하려면 기존 프로젝트 대화에서 요청한다. 직접 말풍선에 임의 문구를 넣는 별도 API는 구현하지 않는다. 실제 펫 화면 표시와 음성 인식은 실행기만으로 검증하지 않는다.
+펫의 입력·음성·활동 표시는 ChatGPT의 기본 인터페이스를 사용한다. Show pet은 앱의 `/pet` 또는 macOS 기본 Option+Space로 표시한다. 진행 단계는 등록된 소유 Work의 카드 제목으로 갱신하고, 펫 입력창의 답은 로컬 중계로 원래 Work에 전달한다. 자세한 여러 에이전트 대화를 펫의 임의 말풍선에 모두 주입하는 기능은 제공하지 않는다. 펫의 실제 화면, 직접 답변의 도착, 음성 입력은 각각 검증한 범위만 보고한다.
 
 ## 구조와 검증
 
@@ -105,4 +126,4 @@ mypy
 
 개발 검사에만 `ruff==0.17.0`, `mypy==2.4.0`가 필요하다. CI는 순환 의존성, 레이어 경계, 220줄 파일·65줄 함수·3단계 중첩, 복잡도, strict 타입과 행동 테스트를 검사한다. 오프라인 테스트는 개인 계정이나 실제 모델을 호출하지 않는다.
 
-설계 참고: [CodePet의 공유 채팅·턴 제어](https://github.com/nokryong/CodePet/blob/main/README.md), [Codex 비대화형 실행](https://learn.chatgpt.com/docs/developer-commands#codex-exec), [Codex 설정](https://learn.chatgpt.com/docs/config-file/config-reference), [Claude CLI 옵션](https://code.claude.com/docs/en/cli-reference), [AGY 응답 계약](https://antigravity.google/docs/cli/headless/). CodePet은 다양한 계정·대화·펫 기능을 제공한다. 이 작업에서는 계정 전환·대화 감시 없이 GPT 최종 판단과 공개 입력 제한을 유지하기 위해 독립 실행기를 선택했다.
+설계 참고: [CodePet의 공유 채팅·턴 제어](https://github.com/nokryong/CodePet/blob/main/README.md), [Codex 비대화형 실행](https://learn.chatgpt.com/docs/developer-commands#codex-exec), [Codex 설정](https://learn.chatgpt.com/docs/config-file/config-reference), [Claude CLI 옵션](https://code.claude.com/docs/en/cli-reference), [AGY 응답 계약](https://antigravity.google/docs/cli/headless/), [ChatGPT 펫](https://learn.chatgpt.com/docs/pets), [활동·알림](https://learn.chatgpt.com/docs/notifications). CodePet은 다양한 계정·대화·펫 기능을 제공한다. 이 작업에서는 계정 전환·대화 감시 없이 GPT 최종 판단과 공개 입력 제한을 유지하기 위해 독립 실행기를 선택했다.

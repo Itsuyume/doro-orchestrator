@@ -9,7 +9,7 @@ KEYS = r"\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{25,}|github_p
 
 
 def main() -> int:
-    result = subprocess.run(["git", "diff", "--cached", "--name-only", "-z"], cwd=ROOT,
+    result = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], cwd=ROOT,
                             check=True, capture_output=True)
     files = [name.decode() for name in result.stdout.split(b"\0") if name]
     if not files:

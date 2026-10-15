@@ -14,6 +14,25 @@ def nesting(node: ast.AST, depth: int = 0) -> int:
     return max([current, *(nesting(child, current) for child in ast.iter_child_nodes(node))])
 
 
+def python_imports(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.ImportFrom):
+        return [node.module] if node.module else []
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    return []
+
+
+def function_failures(module: str, node: ast.AST) -> list[str]:
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return []
+    failures = []
+    if (node.end_lineno or node.lineno) - node.lineno + 1 > 65:
+        failures.append(f"{module}:{node.lineno}: function exceeds 65 lines")
+    if nesting(node) > 3:
+        failures.append(f"{module}:{node.lineno}: nesting exceeds 3 levels")
+    return failures
+
+
 def inspect(path: Path) -> tuple[str, set[str], list[str]]:
     relative = path.relative_to(ROOT)
     module = ".".join(relative.with_suffix("").parts)
@@ -24,15 +43,12 @@ def inspect(path: Path) -> tuple[str, set[str], list[str]]:
     if len(source.splitlines()) > 220:
         failures.append(f"{module}: file exceeds 220 lines")
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if (node.end_lineno or node.lineno) - node.lineno + 1 > 65:
-                failures.append(f"{module}:{node.lineno}: function exceeds 65 lines")
-            if nesting(node) > 3:
-                failures.append(f"{module}:{node.lineno}: nesting exceeds 3 levels")
-        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("doro."):
-            dependencies.add(node.module)
-        if isinstance(node, ast.Import):
-            dependencies.update(alias.name for alias in node.names if alias.name.startswith("doro."))
+        failures.extend(function_failures(module, node))
+        for dependency in python_imports(node):
+            if dependency.startswith("doro."):
+                dependencies.add(dependency)
+            if dependency in {"http.server", "socketserver"}:
+                failures.append(f"{module}: web-server imports are disabled")
     layer = relative.parts[1]
     for dependency in dependencies:
         if dependency.split(".")[1] not in LAYERS[layer]:

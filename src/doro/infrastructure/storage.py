@@ -1,14 +1,16 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from dataclasses import replace
 import fcntl
 import os
 from pathlib import Path
 import sqlite3
 from uuid import UUID
 
-from doro.domain.models import Config, DoroError, Session
-from doro.infrastructure.serde import decode_session, encode_session
+from doro.domain.models import ApprovalReceipt, Config, DoroError, OwnerRoute, Session
+from doro.domain.policy import ensure_public
+from doro.infrastructure.serde import decode_receipt, decode_session, encode_receipt, encode_session
 
 
 def session_key(value: str) -> str:
@@ -27,6 +29,13 @@ def private_directory(path: Path) -> None:
     path.chmod(0o700)
 
 
+def validate_owner(thread_id: str, label: str) -> None:
+    session_key(thread_id)
+    if not label.strip() or len(label) > 60 or any(ord(char) < 32 for char in label):
+        raise DoroError("Work label must be a short single line")
+    ensure_public(label)
+
+
 class LocalStore:
     def __init__(self, root: Path) -> None:
         private_directory(root)
@@ -37,6 +46,8 @@ class LocalStore:
         with self.connect() as connection:
             connection.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS daily (day TEXT PRIMARY KEY, calls INTEGER NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS owners (session_id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, label TEXT NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
         self.database.chmod(0o600)
 
     @contextmanager
@@ -109,3 +120,48 @@ class LocalStore:
         with os.fdopen(descriptor, "w") as output:
             output.write("\n\n".join(content) + "\n")
         return path
+
+    def bind(self, route: OwnerRoute) -> None:
+        validate_owner(route.thread_id, route.label)
+        with self.lock(route.session_id):
+            if self.load(route.session_id).mode != "work":
+                raise DoroError("Only current Work sessions can receive pet replies")
+            with self.connect() as connection:
+                existing = connection.execute("SELECT thread_id FROM owners WHERE session_id=?", (route.session_id,)).fetchone()
+                if existing and existing[0] != route.thread_id:
+                    raise DoroError("Owner already bound; do not redirect a pending approval")
+                connection.execute("INSERT INTO owners VALUES (?,?,?) ON CONFLICT(session_id) DO UPDATE SET label=excluded.label",
+                                   (route.session_id, route.thread_id, route.label))
+
+    def routes(self) -> tuple[OwnerRoute, ...]:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT session_id,thread_id,label FROM owners ORDER BY rowid").fetchall()
+        return tuple(OwnerRoute(str(row[0]), str(row[1]), str(row[2])) for row in rows)
+
+    def record_decision(self, session: Session, receipt: ApprovalReceipt) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            changed = connection.execute("UPDATE sessions SET payload=? WHERE id=?",
+                                         (encode_session(session), session_key(session.id)))
+            if changed.rowcount != 1:
+                raise DoroError("Approval session no longer exists")
+            connection.execute("INSERT INTO receipts VALUES (?,?)", (receipt.id, encode_receipt(receipt)))
+
+    def outbox(self) -> tuple[ApprovalReceipt, ...]:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT payload FROM receipts ORDER BY rowid").fetchall()
+        receipts = (decode_receipt(str(row[0])) for row in rows)
+        return tuple(receipt for receipt in receipts if not receipt.delivered)
+
+    def receipt(self, receipt_id: str) -> ApprovalReceipt:
+        with self.connect() as connection:
+            row = connection.execute("SELECT payload FROM receipts WHERE id=?", (session_key(receipt_id),)).fetchone()
+        if row is None:
+            raise DoroError("Approval reply not found")
+        return decode_receipt(str(row[0]))
+
+    def acknowledge(self, receipt_id: str) -> None:
+        receipt = self.receipt(receipt_id)
+        with self.connect() as connection:
+            connection.execute("UPDATE receipts SET payload=? WHERE id=?",
+                               (encode_receipt(replace(receipt, delivered=True)), receipt.id))

@@ -5,6 +5,8 @@ from doro.domain.policy import ensure_public
 
 
 def require_approval(session: Session) -> None:
+    if session.status == "cancelled":
+        raise DoroError("This collaboration was closed; no further model calls are authorized")
     if session.status in {"awaiting_approval", "awaiting_direction"}:
         raise DoroError("User approval/direction is required; no CLI was started")
     if not any(gate.kind == "start" and gate.decision == "approve" for gate in session.checkpoints):
@@ -15,7 +17,7 @@ def request_checkpoint(session: Session, kind: str, summary: str) -> None:
     if kind not in {"start", "branch", "apply"} or not summary.strip() or len(summary) > 6000:
         raise DoroError("Checkpoint needs a valid kind and a non-empty summary within 6000 characters")
     ensure_public(summary)
-    if session.status in {"running", "awaiting_approval"}:
+    if session.status in {"running", "awaiting_approval", "cancelled"}:
         raise DoroError("Cannot replace a running turn or an unanswered approval")
     if session.status == "completed" and kind != "apply":
         raise DoroError("Completed collaboration can only request approval to apply its result")

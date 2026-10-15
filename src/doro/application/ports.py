@@ -3,7 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from doro.domain.models import Config, Reply, Session
+from doro.domain.models import ApprovalReceipt, Config, OwnerRoute, Reply, Session
 
 
 class Runner(Protocol):
@@ -23,3 +23,17 @@ class Store(Protocol):
     def workspace(self, session_id: str) -> Path: ...
 
     def export(self, session: Session) -> Path: ...
+
+
+class RelayStore(Store, Protocol):
+    def bind(self, route: OwnerRoute) -> None: ...
+
+    def routes(self) -> tuple[OwnerRoute, ...]: ...
+
+    def record_decision(self, session: Session, receipt: ApprovalReceipt) -> None: ...
+
+    def outbox(self) -> tuple[ApprovalReceipt, ...]: ...
+
+    def receipt(self, receipt_id: str) -> ApprovalReceipt: ...
+
+    def acknowledge(self, receipt_id: str) -> None: ...

@@ -1,5 +1,6 @@
 from doro.application.failures import public_error
 from doro.application.prompts import build_prompt
+from doro.domain.activity import activity_title
 from doro.domain.models import Config, DoroError, PlannedTurn, Session
 from doro.domain.progress import progress
 from doro.domain.work import review_count
@@ -7,8 +8,8 @@ from doro.domain.work import review_count
 
 def status_view(config: Config, session: Session) -> dict[str, object]:
     state = progress(config, session)
-    state.update({"pending_input": "", "pending_input_error": ""})
-    if session.mode != "work" or session.status in {"running", "completed"} or session.turns[-1].provider != "work":
+    state.update({"pending_input": "", "pending_input_error": "", "activity_title": activity_title(config, session)})
+    if session.mode != "work" or session.status in {"running", "completed", "cancelled"} or session.turns[-1].provider != "work":
         return state
     phase = "review" if review_count(session) == 0 else "recheck"
     try:

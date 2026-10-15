@@ -17,7 +17,8 @@ from doro.infrastructure.providers import CliRunner
 from doro.infrastructure.storage import LocalStore
 from doro.interface.input import load_task
 from doro.interface.work_cli import add_work_parser, run_work
-from doro.interface.dashboard import serve_progress
+from doro.interface.console import watch_progress
+from doro.interface.approval_cli import add_approval_parser, run_approvals
 
 
 def parser(root: Path) -> argparse.ArgumentParser:
@@ -26,8 +27,10 @@ def parser(root: Path) -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="Local version/auth checks; never probes disabled participants")
     add_work_parser(commands)
-    watch = commands.add_parser("watch", help="Open a read-only local progress view for one session")
+    add_approval_parser(commands)
+    watch = commands.add_parser("watch", help="Print only local phase metadata; no web server or browser")
     watch.add_argument("session_id")
+    watch.add_argument("--once", action="store_true", help="Read one local status without waiting")
     for name in ("plan", "run"):
         task = commands.add_parser(name)
         task.add_argument("--task", type=Path, required=True)
@@ -81,8 +84,11 @@ def dispatch(args: argparse.Namespace, root: Path) -> None:
     if args.command == "work":
         output(run_work(args, config, root))
         return
+    if args.command == "approvals":
+        output(run_approvals(args, config, LocalStore(root / ".doro")))
+        return
     if args.command == "watch":
-        serve_progress(config, LocalStore(root / ".doro"), args.session_id, root / "ui")
+        watch_progress(config, LocalStore(root / ".doro"), args.session_id, sys.stdout, once=args.once)
         return
     if args.command == "doctor":
         output({"providers": doctor(config),
