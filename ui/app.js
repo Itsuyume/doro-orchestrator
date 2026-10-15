@@ -90,6 +90,7 @@ function render(state) {
 }
 
 async function poll() {
+  let nextPoll=1000;
   try {
     const response=await fetch("/api/status",{headers:{Authorization:`Bearer ${token}`},cache:"no-store"});
     if(response.status===401){setText("freshness","도로에게 진행 상황판을 다시 열어달라고 말해줘");return;}
@@ -97,8 +98,11 @@ async function poll() {
     /** @type {State} */ const state=await response.json();
     const key=JSON.stringify(state);if(key!==previous){render(state);previous=key;}
     setText("freshness",`마지막 확인 ${new Date().toLocaleTimeString("ko-KR")}`);
-    if(state.status==="completed")return;
+    if(state.status==="completed"){
+      if(state.mode!=="work")return;
+      nextPoll=3000; // A completed Work proposal may subsequently ask for file-application approval.
+    }
   } catch(error) {setText("freshness",error instanceof Error?error.message:"연결 확인이 필요해");}
-  setTimeout(poll,1000);
+  setTimeout(poll,nextPoll);
 }
 poll();
