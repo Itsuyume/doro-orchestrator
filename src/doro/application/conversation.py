@@ -48,7 +48,8 @@ def conversation(config: Config, session: Session, label: str = "도로 협업",
                  inputs: tuple[HumanInput, ...] = (), input_enabled: bool = False,
                  contexts: tuple[ChatContext, ...] = ()) -> Conversation:
     request = session.task.message + ("\n\n" + session.task.context if session.task.context else "")
-    messages = [ChatMessage("request", "도로 · 작업 범위", "이번 작업 범위", request)]
+    messages = list(inputs_after(inputs, 0)) if session.mode == "chat" else [
+        ChatMessage("request", "도로 · 작업 범위", "이번 작업 범위", request)]
     messages.extend(discussion(session, inputs))
     if session.error:
         messages.append(ChatMessage("error", "도로 · 실행 상태", "오류", session.error, "중단 · 자동 재시도 없음"))

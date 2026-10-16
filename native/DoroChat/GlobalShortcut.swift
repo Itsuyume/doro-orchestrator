@@ -28,14 +28,14 @@ final class GlobalShortcut {
                                          nil, &handler)
         guard result == noErr else { throw ChatReadError.failed("단축키 연결 실패 (\(result))") }
         let identity = EventHotKeyID(signature: doroShortcutSignature, id: 1)
-        let registered = RegisterEventHotKey(UInt32(kVK_ANSI_D), UInt32(controlKey | optionKey), identity,
+        let registered = RegisterEventHotKey(UInt32(kVK_Return), UInt32(controlKey | optionKey), identity,
                                              GetApplicationEventTarget(), 0, &key)
         guard registered == noErr else {
             stop()
             if registered == eventHotKeyExistsErr {
-                throw ChatReadError.failed("⌃⌥D를 다른 앱에서 사용 중이도로. 메뉴 막대나 바로가기로 열어줘도로.")
+                throw ChatReadError.failed("⌃⌥Enter를 다른 앱에서 사용 중이도로. 메뉴 막대나 바로가기로 열어줘도로.")
             }
-            throw ChatReadError.failed("⌃⌥D 단축키를 등록하지 못했도로 (\(registered)).")
+            throw ChatReadError.failed("⌃⌥Enter 단축키를 등록하지 못했도로 (\(registered)).")
         }
         observer = NotificationCenter.default.addObserver(forName: doroOpenNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in self?.onPress() }

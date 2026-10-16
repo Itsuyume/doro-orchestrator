@@ -3,6 +3,8 @@ import json
 
 from doro.domain.models import ApprovalReceipt, Checkpoint, DoroError, Exchange, Session, Turn
 from doro.domain.validation import boolean, integer, keys, mapping, number, parse_task, string, strings
+from doro.domain.new_tasks import validate_chat_session
+from doro.domain.activity import STATES
 
 
 def encode_session(session: Session) -> str:
@@ -66,10 +68,11 @@ def decode_session(raw: str) -> Session:
         boolean(data["retry_until_quota"], "retry_until_quota"),
         string(data["retry_instructions"], "retry_instructions", empty=True),
     )
-    if session.mode not in {"cli", "work"}:
+    if session.mode not in {"cli", "work", "chat"}:
         raise DoroError("Invalid stored session mode")
-    if session.status not in {"ready", "running", "failed", "interrupted", "completed",
-                              "awaiting_claude", "awaiting_work", "awaiting_approval", "awaiting_direction", "cancelled"}:
+    if session.mode == "chat":
+        validate_chat_session(session)
+    if session.status not in STATES:
         raise DoroError("Invalid stored session status")
     if session.status == "awaiting_approval" and (not session.checkpoints or session.checkpoints[-1].decision != "pending"):
         raise DoroError("Invalid stored approval wait: no unanswered checkpoint")

@@ -97,7 +97,8 @@ struct ChatView: View {
                         .help("기존 초안 파일은 보관하고 현재 입력을 새로 저장해도로. 이전 전송을 자동 재시도하지 않도로.")
                 }
             }
-            if controller.showingTasks { TaskManager(controller: controller) }
+            if controller.showingNewTask { NewTaskView(controller: controller) }
+            else if controller.showingTasks { TaskManager(controller: controller) }
             else if let view = controller.conversation {
                 transcript(view)
                 OverlayComposer(controller: controller)
@@ -110,14 +111,19 @@ struct ChatView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                if !controller.showingTasks {
+                if !controller.showingTasks || controller.showingNewTask {
                     Button { controller.showTasks() } label: {
                         Image(systemName: "chevron.left").frame(width: 26, height: 22).contentShape(Rectangle())
                     }.buttonStyle(.plain).help("대화 목록")
                         .accessibilityLabel("대화 목록으로 돌아가기")
                 }
-                ContextSelector(controller: controller)
+                if controller.showingNewTask { Text("새 작업").font(.system(size: 13, weight: .semibold)) }
+                else { ContextSelector(controller: controller) }
                 WindowDragHandle().frame(maxWidth: .infinity).frame(height: 20)
+                Button { controller.beginNewTask() } label: {
+                    Image(systemName: "plus").frame(width: 28, height: 24).contentShape(Rectangle())
+                }.buttonStyle(.plain).help("새 작업").accessibilityLabel("새 GPT 작업 시작")
+                    .disabled(controller.showingNewTask)
                 Button { controller.collapseToDock() } label: {
                     Image(systemName: "chevron.up").frame(width: 28, height: 24).contentShape(Rectangle())
                 }.buttonStyle(.plain).help("대화 접기").accessibilityLabel("대화 접기 · dock만 남기기")

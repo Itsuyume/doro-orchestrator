@@ -21,6 +21,7 @@ final class ComposerTextView: NSTextView {
 struct ChatInputEditor: NSViewRepresentable {
     @Binding var text: String
     @Environment(\.isEnabled) private var isEnabled
+    var label = "도로에게 보낼 내 메시지"
     let onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -44,7 +45,7 @@ struct ChatInputEditor: NSViewRepresentable {
         editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: scroll.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
-        editor.setAccessibilityLabel("도로에게 보낼 내 메시지")
+        editor.setAccessibilityLabel(label)
         editor.delegate = context.coordinator
         scroll.documentView = editor
         return scroll
@@ -54,6 +55,7 @@ struct ChatInputEditor: NSViewRepresentable {
         context.coordinator.parent = self
         guard let editor = scroll.documentView as? ComposerTextView else { return }
         editor.isEditable = isEnabled
+        editor.setAccessibilityLabel(label)
         editor.onSubmit = onSubmit
         guard !editor.hasMarkedText(), editor.string != text else { return }
         editor.string = text

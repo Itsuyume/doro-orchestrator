@@ -9,7 +9,7 @@ extension ChatController {
         memory.expanded = expandedMessages
         memory.scrollTarget = scrollTarget
         memories[selectedSession] = memory
-        return ContextState(selectedSession: selectedSession, memories: memories)
+        return ContextState(selectedSession: selectedSession, memories: memories, newTask: newTask)
     }
 
     @discardableResult func saveMemory() -> Bool {

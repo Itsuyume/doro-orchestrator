@@ -99,7 +99,8 @@ extension ChatController {
 
     func inputProblem(_ text: String) -> String? {
         if text.contains("\0") { return "보낼 수 없는 문자가 들어 있도로." }
-        if let limit = conversation?.input_limit, text.unicodeScalars.count > limit {
+        let limit = conversation?.input_limit ?? 2000
+        if text.unicodeScalars.count > limit {
             return "\(text.unicodeScalars.count)/\(limit)자 · 내용을 나눠 보내줘도로."
         }
         return nil

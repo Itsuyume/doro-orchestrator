@@ -8,6 +8,7 @@ import time
 from doro.infrastructure.input_store import LocalInputStore
 from doro.infrastructure.storage import LocalStore
 from doro.infrastructure.delivery_store import DeliveryOutbox
+from doro.infrastructure.new_task_store import NewTaskStore
 from doro.domain.models import DoroError
 from doro.interface.input import read_bounded
 
@@ -41,7 +42,9 @@ def run_inputs(args: argparse.Namespace, root: Path) -> object:
         if note.owner_thread_id != args.owner_thread or routes.get(note.session_id) != args.owner_thread:
             raise DoroError("Only the registered owning Work can receive this input")
         delivery = next((item for item in DeliveryOutbox(store.sessions).for_session(note.session_id) if item.input_id == note.id), None)
-        return {"input": asdict(note), "delivery": asdict(delivery) if delivery else None}
+        request = NewTaskStore(store.sessions).find(note.id)
+        return {"input": asdict(note), "delivery": asdict(delivery) if delivery else None,
+                "new_task_request": asdict(request) if request else None}
     return asdict(store.acknowledge(args.note_id, args.owner_thread, read_bounded(args.response, 6000) if args.response else ""))
 
 

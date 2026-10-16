@@ -26,6 +26,7 @@ from doro.interface.input_cli import add_input_parser, run_inputs
 from doro.interface.pet_cli import add_pet_parser, run_pet_swap
 from doro.interface.model_cli import add_model_parser, run_model
 from doro.interface.window_cli import add_window_parser, run_window
+from doro.interface.new_task_cli import add_new_task_parser, run_new_task
 
 
 def parser(root: Path) -> argparse.ArgumentParser:
@@ -40,6 +41,7 @@ def parser(root: Path) -> argparse.ArgumentParser:
     add_pet_parser(commands)
     add_model_parser(commands)
     add_window_parser(commands)
+    add_new_task_parser(commands)
     watch = commands.add_parser("watch", help="Print only local phase metadata; no web server or browser")
     watch.add_argument("session_id")
     watch.add_argument("--once", action="store_true", help="Read one local status without waiting")
@@ -102,6 +104,7 @@ def run_local_control(args: argparse.Namespace, config: Config, root: Path) -> o
         "pet-swap": lambda: run_pet_swap(args, root),
         "model": lambda: run_model(args, root, config),
         "window": lambda: run_window(args, root),
+        "new-task": lambda: run_new_task(args, config, root),
     }
     return actions[args.command]()
 
@@ -111,7 +114,7 @@ def dispatch(args: argparse.Namespace, root: Path) -> None:
     if args.command == "work":
         output(run_work(args, config, root))
         return
-    if args.command in {"approvals", "inputs", "pet-swap", "model", "window"}:
+    if args.command in {"approvals", "inputs", "pet-swap", "model", "window", "new-task"}:
         output(run_local_control(args, config, root))
         return
     if args.command == "chat":

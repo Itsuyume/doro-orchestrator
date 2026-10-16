@@ -162,17 +162,18 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let previous = window.frame
         let visible = window.screen?.visibleFrame ?? previous
         let changedCollapse = collapsed != wasCollapsed
-        let tasks = !collapsed && controller.showingTasks
+        let tasks = !collapsed && controller.showingTasks && !controller.showingNewTask
         let anchorTop = controller.display == .panel || (tasks && wasShowingTasks && !wasCollapsed)
         if !wasCollapsed && !wasShowingTasks { expandedSize = previous.size }
         wasCollapsed = collapsed
-        wasShowingTasks = controller.showingTasks
+        wasShowingTasks = controller.showingTasks || controller.showingNewTask
         let count = controller.pinnedContexts.count
         let compactHeight = controller.display == .integrated ? 95 : 46
         let compactWidth = controller.display == .integrated ? (count == 0 ? 94 : 282) : 224
-        configurePanelSizing(window, collapsed: collapsed, taskList: tasks,
+        configurePanelSizing(window, collapsed: collapsed, taskList: tasks || controller.showingNewTask,
                              compact: NSSize(width: CGFloat(compactWidth), height: CGFloat(compactHeight)))
-        let height = min(collapsed ? CGFloat(compactHeight) : tasks ? CGFloat(controller.taskPanelHeight) : expandedSize.height, visible.height)
+        let expandedHeight = controller.showingNewTask ? 340 : tasks ? CGFloat(controller.taskPanelHeight) : expandedSize.height
+        let height = min(collapsed ? CGFloat(compactHeight) : expandedHeight, visible.height)
         let width = min(collapsed ? CGFloat(compactWidth) : tasks ? 390 : expandedSize.width, visible.width)
         if controller.display == .panel {
             placeAtMenuBar(size: NSSize(width: width, height: height), animated: tasks || changedCollapse)

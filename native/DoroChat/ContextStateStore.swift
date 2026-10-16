@@ -4,6 +4,7 @@ struct ContextState: Codable {
     var version = 1
     var selectedSession: String?
     var memories: [String: ContextMemory] = [:]
+    var newTask: NewTaskDraft?
 }
 
 struct ContextStateStore {
@@ -22,6 +23,7 @@ struct ContextStateStore {
     }
 
     private func validate(_ state: ContextState) throws {
+        try state.newTask?.validate()
         guard state.version == 1, state.memories.count <= 5000,
               state.selectedSession.map({ UUID(uuidString: $0) != nil }) ?? true else {
             throw ChatReadError.failed("초안 저장 형식을 확인해줘도로.")

@@ -28,6 +28,7 @@ extension ChatController {
     func openContext(_ id: String) {
         guard contexts.contains(where: { $0.id == id }) else { return }
         guard switchSession(id, openingStack: true) else { return }
+        showingNewTask = false
         showingTasks = false
         collapsed = false
         revealPanel()
@@ -75,7 +76,7 @@ extension ChatController {
         revealPanel()
     }
 
-    func showTasks() { showingTasks = true; collapsed = false; revealPanel() }
+    func showTasks() { showingNewTask = false; showingTasks = true; collapsed = false; revealPanel() }
 
     private func revealPanel() {
         guard display == .hidden else { return }

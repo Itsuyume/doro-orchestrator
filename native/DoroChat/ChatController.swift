@@ -27,6 +27,12 @@ final class ChatController: ObservableObject {
     }
     @Published var stacks = StackCatalog()
     @Published var showingTasks = false { didSet { if oldValue != showingTasks { onStackLayout?() } } }
+    @Published var showingNewTask = false { didSet { if oldValue != showingNewTask { onStackLayout?() } } }
+    @Published var newTask = NewTaskDraft() { didSet { scheduleStateSave() } }
+    @Published var newTaskBusy = false
+    var newTaskPolling = false
+    var lastNewTaskPoll = 0.0
+    var readyNewTask: NewTaskRecord?
     @Published var historyExpanded = false { didSet { if oldValue != historyExpanded { onStackLayout?() } } }
     @Published var historySelecting = false { didSet { if oldValue != historySelecting { onStackLayout?() } } }
     @Published var lastRemoved: Set<String> = []
@@ -64,7 +70,7 @@ final class ChatController: ObservableObject {
     let persistState: (ContextState) throws -> Void
     let recoverPersistence: ((ContextState) throws -> Void)?
     var sending: Bool { sendingSessions.contains(selectedSession) }
-    var canQuit: Bool { sendingSessions.isEmpty }
+    var canQuit: Bool { sendingSessions.isEmpty && !newTaskBusy }
     var approvalCount: Int { contexts.filter(\.needs_input).count }
     var currentLabel: String { contexts.first { $0.id == selectedSession }?.label ?? "도로 협업" }
 
@@ -77,6 +83,7 @@ final class ChatController: ObservableObject {
         self.persistState = persistState
         self.recoverPersistence = recoverPersistence
         memories = state.memories
+        newTask = state.newTask ?? NewTaskDraft()
         stacks = StackCatalog(removed: history.removed)
         lastRemoved = history.undo
         selectedSession = state.selectedSession ?? command[command.count - 2]
@@ -131,6 +138,7 @@ final class ChatController: ObservableObject {
     }
 
     func refresh(force: Bool = true) {
+        pollNewTask()
         do { try applyRequest(); if !requestError.isEmpty { requestError = "" } }
         catch {
             let message = "연결 갱신 실패: \(error.localizedDescription)"
