@@ -138,10 +138,6 @@ struct ChatView: View {
                 if controller.approvalCount > 0 {
                     ApprovalEntry(controller: controller)
                 }
-                Button { controller.minimizeCurrent() } label: {
-                    Image(systemName: "minus").frame(width: 26, height: 20).contentShape(Rectangle())
-                }.buttonStyle(.plain).background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
-                    .accessibilityLabel("창 최소화 · 메뉴 막대에서 다시 열기").help("최소화")
                 Button { controller.requestStop() } label: {
                     Image(systemName: "xmark").frame(width: 26, height: 20).contentShape(Rectangle())
                 }.buttonStyle(.plain).background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
