@@ -35,7 +35,7 @@ struct MessageBubble: View {
                     }
                 }
                 .padding(10)
-                .background(message.from_user ? Color(white: 0.94) : .white,
+                .background(message.from_user ? ChatSurface.userBubble : ChatSurface.aiBubble,
                             in: RoundedRectangle(cornerRadius: 12))
             }.frame(maxWidth: .infinity, alignment: message.from_user ? .trailing : .leading)
             if !message.from_user { Spacer(minLength: 44) }
@@ -76,13 +76,12 @@ struct ChatView: View {
                     }
             } }
         }
-        .foregroundStyle(Color.black.opacity(0.86))
+        .foregroundStyle(.primary)
         .padding(6)
         .background(controller.collapsed ? Color.clear : ChatSurface.panel, in: RoundedRectangle(cornerRadius: 16))
         .overlay {
             if !controller.collapsed { RoundedRectangle(cornerRadius: 16).strokeBorder(ChatSurface.border, lineWidth: 0.75) }
         }
-        .preferredColorScheme(.light)
     }
 
     private var expandedBody: some View {
@@ -135,11 +134,11 @@ struct ChatView: View {
                 }
                 Button { controller.minimizeCurrent() } label: {
                     Image(systemName: "minus").frame(width: 26, height: 20).contentShape(Rectangle())
-                }.buttonStyle(.plain).background(.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
+                }.buttonStyle(.plain).background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
                     .accessibilityLabel("창 최소화 · 메뉴 막대에서 다시 열기").help("최소화")
                 Button { controller.requestStop() } label: {
                     Image(systemName: "xmark").frame(width: 26, height: 20).contentShape(Rectangle())
-                }.buttonStyle(.plain).background(.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
+                }.buttonStyle(.plain).background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
                     .accessibilityLabel("도로협업 종료 · 작업 기록은 유지")
                     .help(controller.canQuit ? "종료 · 메뉴 아이콘도 닫기" : "메시지 전달 확인 중")
                     .disabled(!controller.canQuit)

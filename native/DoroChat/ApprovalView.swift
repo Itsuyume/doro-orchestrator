@@ -34,12 +34,13 @@ struct ApprovalView: View {
                 Button("보류") { controller.submitApproval(.reject, target: target) }
                     .disabled(!canAnswer)
                 Button("승인") { controller.submitApproval(.approve, target: target) }
-                    .buttonStyle(.borderedProminent).tint(.black.opacity(0.8)).disabled(!canAnswer)
+                    .buttonStyle(.borderedProminent).tint(ChatSurface.action)
+                    .foregroundStyle(ChatSurface.actionText).disabled(!canAnswer)
                     .accessibilityLabel(target.label + " · 질문 " + target.approval.checkpoint_id.prefix(4) + " 승인")
             }.controlSize(.large)
         }.padding(18).frame(width: 360, height: 340)
-            .background(Color(white: 0.98), in: RoundedRectangle(cornerRadius: 18))
-            .foregroundStyle(.black.opacity(0.88)).preferredColorScheme(.light)
+            .background(ChatSurface.panel, in: RoundedRectangle(cornerRadius: 18))
+            .foregroundStyle(.primary)
             .onAppear { details = target.approval.brief.isEmpty }
     }
 

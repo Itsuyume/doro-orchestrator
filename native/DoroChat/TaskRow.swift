@@ -41,6 +41,7 @@ struct TaskRow: View {
             .onExitCommand { activeSwipe = nil; resetSwipe() }
             .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
             .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 if canSwipe {
                     Button(role: pinned ? nil : .destructive) { _ = onClose() } label: {

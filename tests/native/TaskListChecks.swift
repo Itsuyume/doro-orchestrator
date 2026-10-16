@@ -10,12 +10,13 @@ struct TaskListChecks {
         precondition(two - one == 56, "Rows alone determine the open-list height")
         let history = TaskListLayout.contentHeight(open: 1, history: 3,
             historyExpanded: true, selecting: true, undo: true)
-        precondition(history - one == 3 * 56 + 28, "History selection remains independently usable")
+        precondition(history - one == 2 * 56 + 28, "History shares the three-row viewport; selection stays usable")
         let empty = TaskListLayout.contentHeight(open: 0, history: 0,
             historyExpanded: false, selecting: false, undo: false)
         precondition(empty == 72 && one == 128, "No redundant open-conversation heading is reserved")
         precondition(taskListHeight(content: two) > taskListHeight(content: one))
         precondition(taskListHeight(content: 10000) == 620)
+        checkThreeRowViewport()
         let controller = ChatController(command: ["/usr/bin/false", "chat", "A", "--json"])
         controller.display = .panel
         controller.showingTasks = true
@@ -33,6 +34,21 @@ struct TaskListChecks {
         checkMouseSwipe()
         try checkOutsideCollapse()
         print("Task list checks passed: fold height, independent history, close stays open, protected records, undo, hidden motion")
+    }
+
+    static func checkThreeRowViewport() {
+        let three = TaskListLayout.rowViewportHeight(open: 3, history: 0, historyExpanded: false)
+        precondition(three == 3 * TaskListLayout.rowHeight + 2 * TaskListLayout.verticalInset)
+        for count in [0, 1, 2, 3, 4, 50, 1000] {
+            let height = TaskListLayout.rowViewportHeight(open: count, history: 0, historyExpanded: false)
+            precondition(height <= three, "Four or more tasks cannot enlarge the dock list")
+        }
+        let mixed = TaskListLayout.rowViewportHeight(open: 2, history: 50, historyExpanded: true)
+        precondition(mixed == three, "Open and past conversations share one three-row viewport")
+        let controls = TaskListLayout.contentHeight(open: 50, history: 50,
+            historyExpanded: true, selecting: true, undo: true)
+        precondition(controls == three + 3 * TaskListLayout.controlHeight,
+                     "History, selection and undo controls cannot disappear inside the scrolling rows")
     }
 
     static func checkMouseSwipe() {

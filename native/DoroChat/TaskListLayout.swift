@@ -1,17 +1,23 @@
 import AppKit
 
 enum TaskListLayout {
+    static let maxVisibleRows = 3
     static let rowHeight = 56.0
     static let controlHeight = 28.0
     static let verticalInset = 8.0
 
+    static func rowViewportHeight(open: Int, history: Int, historyExpanded: Bool) -> Double {
+        let rows = open + (historyExpanded ? history : 0)
+        let visible = open == 0 && history == 0 ? 1 : min(maxVisibleRows, rows)
+        return verticalInset * 2 + Double(visible) * rowHeight
+    }
+
     static func contentHeight(open: Int, history: Int, historyExpanded: Bool,
                               selecting: Bool, undo: Bool) -> Double {
-        var height = verticalInset * 2 + Double(max(0, open)) * rowHeight
-        if open == 0 && history == 0 { height += rowHeight }
+        var height = rowViewportHeight(open: open, history: history, historyExpanded: historyExpanded)
         if history > 0 {
             height += controlHeight
-            if historyExpanded { height += Double(history) * rowHeight + (selecting ? controlHeight : 0) }
+            if historyExpanded && selecting { height += controlHeight }
         }
         if undo { height += controlHeight }
         return height

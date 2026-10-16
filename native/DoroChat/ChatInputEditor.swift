@@ -34,6 +34,8 @@ struct ChatInputEditor: NSViewRepresentable {
         editor.isRichText = false
         editor.allowsUndo = true
         editor.drawsBackground = false
+        editor.textColor = .textColor
+        editor.insertionPointColor = .textColor
         editor.font = .systemFont(ofSize: 13)
         editor.textContainerInset = NSSize(width: 4, height: 4)
         editor.isVerticallyResizable = true

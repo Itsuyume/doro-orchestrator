@@ -6,7 +6,7 @@ struct OverlayComposer: View {
         VStack(alignment: .leading, spacing: 5) {
             ChatInputEditor(text: $controller.inputText, onSubmit: controller.submitInput)
                 .frame(height: 34)
-                .padding(5).background(.white.opacity(0.96), in: RoundedRectangle(cornerRadius: 8))
+                .padding(5).background(ChatSurface.editor, in: RoundedRectangle(cornerRadius: 8))
                 .accessibilityLabel("도로에게 보낼 내 메시지")
             HStack {
                 Text(controller.currentLabel).lineLimit(1).foregroundStyle(.secondary)

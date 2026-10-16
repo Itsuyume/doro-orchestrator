@@ -56,30 +56,21 @@ struct TaskManager: View {
     @State private var activeSwipe: String?
 
     var body: some View {
-        List {
-            if controller.pinnedContexts.isEmpty && controller.otherContexts.isEmpty {
-                Text("대화가 없도로.").font(.system(size: 12)).foregroundStyle(.secondary)
-                    .frame(height: TaskListLayout.rowHeight).listRowSeparator(.hidden)
-            }
-            ForEach(controller.pinnedContexts) { row($0, pinned: true) }
+        VStack(spacing: 0) {
+            conversations
             if !controller.otherContexts.isEmpty {
                 historyHeader
-                if controller.historyExpanded {
-                    if selecting { selectionBar }
-                    ForEach(controller.otherContexts) { row($0, pinned: false) }
-                }
+                if controller.historyExpanded && selecting { selectionBar }
             }
             if !controller.lastRemoved.isEmpty {
                 Button { animate { controller.undoHistoryRemoval() } } label: {
                     Label("삭제 취소", systemImage: "arrow.uturn.backward")
                 }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
                     .help("최근 지운 대화 \(controller.lastRemoved.count)개를 목록에 복원")
-                    .frame(height: TaskListLayout.controlHeight).listRowSeparator(.hidden)
+                    .frame(maxWidth: .infinity, alignment: .leading).frame(height: TaskListLayout.controlHeight)
+                    .padding(.horizontal, 14)
             }
-        }.listStyle(.plain).scrollContentBackground(.hidden)
-            .environment(\.defaultMinListRowHeight, 0)
-            .contentMargins(.vertical, TaskListLayout.verticalInset, for: .scrollContent)
-            .background(ChatSurface.panel, in: RoundedRectangle(cornerRadius: 14))
+        }.background(ChatSurface.panel, in: RoundedRectangle(cornerRadius: 14))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .onChange(of: controller.otherContexts.map(\.id)) { _, ids in
                 selected.formIntersection(ids)
@@ -89,6 +80,33 @@ struct TaskManager: View {
                 if activeSwipe != nil { activeSwipe = nil }
                 else if selecting { selecting = false; selected = [] }
             }
+    }
+
+    private var conversations: some View {
+        ScrollViewReader { proxy in
+            List {
+                if controller.pinnedContexts.isEmpty && controller.otherContexts.isEmpty {
+                    Text("대화가 없도로.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        .frame(height: TaskListLayout.rowHeight).listRowSeparator(.hidden).listRowBackground(Color.clear)
+                }
+                ForEach(controller.pinnedContexts) { row($0, pinned: true).id($0.id) }
+                if controller.historyExpanded {
+                    ForEach(controller.otherContexts) { row($0, pinned: false).id($0.id) }
+                }
+            }.listStyle(.plain).scrollContentBackground(.hidden)
+                .environment(\.defaultMinListRowHeight, 0)
+                .contentMargins(.vertical, 0, for: .scrollContent)
+                .scrollIndicators(.visible, axes: .vertical).scrollBounceBehavior(.basedOnSize)
+                .frame(height: TaskListLayout.rowViewportHeight(open: controller.pinnedContexts.count,
+                    history: controller.otherContexts.count, historyExpanded: controller.historyExpanded)
+                    - 2 * TaskListLayout.verticalInset)
+                .padding(.vertical, TaskListLayout.verticalInset)
+                .onScrollPhaseChange { _, phase in if phase != .idle { activeSwipe = nil } }
+                .onChange(of: controller.historyExpanded) { _, expanded in
+                    guard expanded, let first = controller.otherContexts.first else { return }
+                    DispatchQueue.main.async { proxy.scrollTo(first.id, anchor: .top) }
+                }
+        }
     }
 
     private var historyHeader: some View {
@@ -107,7 +125,7 @@ struct TaskManager: View {
             } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .accessibilityLabel("지난 대화 관리")
         }.font(.system(size: 12)).frame(height: TaskListLayout.controlHeight)
-            .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 10)).listRowSeparator(.hidden)
+            .padding(.leading, 14).padding(.trailing, 10)
     }
 
     private var selectionBar: some View {
@@ -120,7 +138,7 @@ struct TaskManager: View {
                 .disabled(selected.isEmpty)
             Button("취소") { selecting = false; selected = [] }
         }.font(.system(size: 11)).buttonStyle(.plain).frame(height: TaskListLayout.controlHeight)
-            .listRowSeparator(.hidden)
+            .padding(.horizontal, 14)
     }
 
     private func row(_ context: ChatContext, pinned: Bool) -> some View {
