@@ -5,13 +5,16 @@ from doro.domain.policy import ensure_public
 
 PHASES = {
     "draft": "Do the main task. Produce a concrete first solution, code or proposed patch and edge cases.",
-    "ideas": ("Propose useful ideas and alternative approaches beyond criticism of the draft. "
-              "Explain benefits, tradeoffs, assumptions and a small check for material ideas. "
+    "ideas": ("Explore a broad range of concise, distinct ideas and alternative approaches; no fixed idea count. "
+              "Go beyond criticism of the draft. Explain benefits, tradeoffs, assumptions and a small check "
+              "for promising ideas; label speculation. "
               "Use a bounded partial review where helpful; GPT decides what to adopt."),
-    "review": "Review GPT's solution. Give specific objections, failure paths, edge cases and improvements.",
+    "review": ("Review GPT's solution for specific objections, failure paths, edge cases and improvements. "
+               "Also propose diverse, concise new ideas and alternatives beyond defect correction; no fixed idea count."),
     "rebuttal": ("Evaluate material ideas and review objections. Accept or adapt useful changes; "
                  "explain deferred or rejected suggestions. Improve the work without forcing adoption."),
-    "recheck": "Check GPT's rebuttal and revised work. Report remaining material issues or explicit agreement.",
+    "recheck": ("Check GPT's rebuttal and revised work. Report remaining material issues or explicit agreement. "
+                "Add distinct new ideas when they offer value, without repeating earlier suggestions."),
     "final": ("Make the final judgment. Deliver the solution and reasons for material idea/review decisions. "
               "Distinguish proposals, implemented changes, verified results and unverified limits."),
 }
