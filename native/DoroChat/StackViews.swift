@@ -97,7 +97,7 @@ struct TaskManager: View {
                         }
                 }
             }.listStyle(.plain).scrollContentBackground(.hidden)
-                .environment(\.defaultMinListRowHeight, 0)
+                .environment(\.defaultMinListRowHeight, 1)
                 .contentMargins(.vertical, 0, for: .scrollContent)
                 .scrollIndicators(.visible, axes: .vertical).scrollBounceBehavior(.basedOnSize)
                 .frame(height: TaskListLayout.rowViewportHeight(open: controller.pinnedContexts.count,
