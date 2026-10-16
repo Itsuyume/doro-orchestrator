@@ -30,6 +30,9 @@ import AppKit
         controller.applyNewTask(record(request, "unknown", target, thread, error: "Outcome unknown"), delivery: nil)
         precondition(!controller.canStartNewTask && controller.newTask.text == "A fresh task",
                      "Unknown creation must preserve the draft and refuse duplicate creation")
+        controller.beginNewTask()
+        precondition(controller.newTask.id == request && controller.newTask.text == "A fresh task",
+                     "Unconfirmed creation must retain its original identity and draft")
         controller.applyNewTask(record(request, "pending", target, thread),
             delivery: NewTaskDelivery(state: "failed", error: "Disconnected"))
         precondition(controller.canStartNewTask && controller.newTask.retryable)
@@ -43,17 +46,33 @@ import AppKit
         controller.applyNewTask(record(request, "created", target, thread, token: "confirmed-test-capability"), delivery: nil)
         precondition(controller.selectedSession == target && !controller.showingNewTask && !controller.showingTasks)
         precondition(controller.newTask.text.isEmpty && controller.memories[source]?.text == "Existing task draft")
+        controller.beginNewTask()
+        precondition(controller.showingNewTask && controller.newTask.sourceSession == target)
+        precondition(controller.newTask.id == nil && !controller.newTask.queued && controller.newTask.text.isEmpty,
+                     "The next plus must start fresh from the newly selected GPT context")
+        checkLateCompletion(source: source, request: request, target: target, thread: thread)
+        try checkPersistence(source: source, request: request)
+        checkSaveFailure(source: source)
+        print("New task checks passed: independent drafts, restart, unknown/failed outcomes, stale replies, fresh plus, confirmed switch, save failure")
+    }
+
+    @MainActor static func checkLateCompletion(source: String, request: String, target: String, thread: String) {
         let waiting = ChatController(command: ["/usr/bin/false", "chat", source, "--json"])
         waiting.newTask = NewTaskDraft(text: "Keep pending", id: request, sourceSession: source, queued: true)
         waiting.showingTasks = true
         waiting.applyNewTask(record(request, "created", target, thread, token: "confirmed-test-capability"), delivery: nil)
-        precondition(waiting.selectedSession == source && waiting.readyNewTask != nil,
+        precondition(waiting.selectedSession == source && waiting.stacks.contains(target),
                      "Late creation cannot take focus from a different task")
+        precondition(waiting.newTask.text.isEmpty && !waiting.newTask.queued,
+                     "A confirmed delivered draft must not occupy the next plus composer")
         waiting.beginNewTask()
-        precondition(waiting.selectedSession == target && waiting.readyNewTask == nil)
-        try checkPersistence(source: source, request: request)
-        checkSaveFailure(source: source)
-        print("New task checks passed: independent drafts, restart, unknown/failed outcomes, stale replies, confirmed switch, save failure")
+        precondition(waiting.selectedSession == source && waiting.showingNewTask && waiting.newTask.id == nil)
+        precondition(waiting.newTask.sourceSession == source && waiting.newTask.text.isEmpty,
+                     "Plus opens a fresh editor; earlier completed tasks remain in the list")
+        waiting.newTask.text = "Next unsent request"
+        waiting.applyNewTask(record(request, "created", target, thread, token: "confirmed-test-capability"), delivery: nil)
+        precondition(waiting.newTask.text == "Next unsent request" && waiting.selectedSession == source,
+                     "A repeated completion cannot erase the next draft or reopen an earlier task")
     }
 
     static func record(_ id: String, _ state: String, _ session: String, _ thread: String,

@@ -108,6 +108,27 @@ class NewTaskTests(unittest.TestCase):
         self.assertEqual(attach_chat(self.store, request_id, self.owner, thread_id, self.config), session_id)
         self.assertEqual(len(self.sessions.routes()), 2)
 
+    def test_next_task_uses_the_selected_new_gpt_owner_without_copying_its_history(self) -> None:
+        first = self.request("First request")
+        first_session, first_owner = self.create(first)
+        update_chat(self.store, first, first_owner, "Earlier answer stays in its own chat", True)
+        token = self.store.inputs.register_ui(first_session)
+        second = str(uuid4())
+        self.store.begin(first_session, "Only the second request", second, token)
+        self.store.inputs.post(first_session, "Only the second request", "", token, second)
+        self.assertTrue(self.store.claim(second, first_owner))
+        second_owner = str(uuid4())
+        second_session = attach_chat(self.store, second, first_owner, second_owner, self.config)
+        notes = self.store.inputs.inputs(second_session)
+        view = conversation(self.config, self.sessions.load(second_session), inputs=notes, input_enabled=True)
+        self.assertEqual([message.text for message in view.messages], ["Only the second request"])
+        self.assertEqual(self.sessions.load(second_session).turns, [])
+        self.assertEqual(self.store.get(second).broker_thread, first_owner)
+        self.assertNotEqual(self.store.get(second).broker_thread, self.owner)
+        self.assertNotEqual(first_session, second_session)
+        self.assertEqual(self.sessions.load(first_session).turns[-1].text, "Earlier answer stays in its own chat")
+        self.assertEqual(self.runner.prompts, [])
+
     def test_uncertain_creation_never_automatically_retries_and_can_record_a_known_result(self) -> None:
         request_id = self.request()
         self.assertTrue(self.store.claim(request_id, self.owner))

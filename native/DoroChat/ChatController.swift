@@ -32,7 +32,6 @@ final class ChatController: ObservableObject {
     @Published var newTaskBusy = false
     var newTaskPolling = false
     var lastNewTaskPoll = 0.0
-    var readyNewTask: NewTaskRecord?
     @Published var historyExpanded = false { didSet { if oldValue != historyExpanded { onStackLayout?() } } }
     @Published var historySelecting = false { didSet { if oldValue != historySelecting { onStackLayout?() } } }
     @Published var lastRemoved: Set<String> = []

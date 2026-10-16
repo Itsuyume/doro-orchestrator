@@ -7,7 +7,6 @@ extension ChatController {
         if newTask.sourceSession == nil { newTask.sourceSession = selectedSession }
         showingNewTask = true
         collapsed = false
-        if let readyNewTask { applyNewTask(readyNewTask, delivery: readyNewTask.delivery); return }
         pollNewTask(force: true)
     }
 
@@ -46,7 +45,6 @@ extension ChatController {
         let now = ProcessInfo.processInfo.systemUptime
         guard newTask.queued, !newTaskBusy, !newTaskPolling, force || now - lastNewTaskPoll >= 3,
               let id = newTask.id, let source = newTask.sourceSession, let token = capabilities[source] else { return }
-        guard showingNewTask || readyNewTask == nil else { return }
         lastNewTaskPoll = now
         newTaskPolling = true
         let command = Array(sessionCommand(source).dropLast(3)) + ["new-task", "status", id, "--source-session", source]
@@ -71,15 +69,14 @@ extension ChatController {
                 newTask.status = "새 대화의 연결 확인을 기다리는 중이도로."; return
             }
             capabilities[record.session_id] = token
-            guard showingNewTask else {
-                readyNewTask = record
-                newTask.status = "새 대화가 준비됐도로. ＋에서 이어 열 수 있도로."; return
+            if showingNewTask {
+                guard switchSession(record.session_id, openingStack: true) else { return }
+                showingNewTask = false
+                showingTasks = false
+            } else {
+                stacks.open(record.session_id)
             }
-            guard switchSession(record.session_id, openingStack: true) else { return }
-            showingNewTask = false
-            showingTasks = false
             newTask = NewTaskDraft()
-            readyNewTask = nil
             refresh()
             return
         }
