@@ -223,3 +223,18 @@ mypy
 개발 검사에만 `ruff==0.17.0`, `mypy==2.4.0`가 필요하다. CI는 순환 의존성, 레이어 경계, 220줄 파일·65줄 함수·3단계 중첩, 복잡도, strict 타입과 행동 테스트를 검사한다. 오프라인 테스트는 개인 계정이나 실제 모델을 호출하지 않는다.
 
 설계 참고: [CodePet의 공유 채팅·턴 제어](https://github.com/nokryong/CodePet/blob/main/README.md), [Codex 비대화형 실행](https://learn.chatgpt.com/docs/developer-commands#codex-exec), [Codex 설정](https://learn.chatgpt.com/docs/config-file/config-reference), [Claude CLI 옵션](https://code.claude.com/docs/en/cli-reference), [AGY 응답 계약](https://antigravity.google/docs/cli/headless/), [ChatGPT 펫](https://learn.chatgpt.com/docs/pets), [활동·알림](https://learn.chatgpt.com/docs/notifications). CodePet은 다양한 계정·대화·펫 기능을 제공한다. 이 작업에서는 계정 전환·대화 감시 없이 GPT 최종 판단과 공개 입력 제한을 유지하기 위해 독립 실행기를 선택했다.
+
+### 작업 중 협업창 입력 알림
+
+기본 전달은 공식 `codex queue`다. 작업 중에도 다음 도구 실행 뒤 입력 ID를 확인하도록 공식 `PostToolUse` 알림을 추가할 수 있다. 설치된 Doro 스킬이 있는 환경에서 아래 명령은 설정안을 보여주며, `--apply`를 붙이면 기존 후크를 보존하고 한 항목을 추가한다. 변경 전 파일은 Codex의 `skill-archives`에 보관한다.
+
+```sh
+python3 tools/install_input_notifications.py
+python3 tools/install_input_notifications.py --apply
+```
+
+새 후크는 Codex CLI의 `/hooks`에서 정의를 검토하고 정상적으로 신뢰한 뒤에만 실행된다. 설치 도구는 신뢰 기록을 수정하지 않는다. [공식 후크 문서](https://learn.chatgpt.com/docs/hooks)를 따른다. 후크 설정을 읽는 다음 실행/재개 전에는 현재 작업에 활성화됐다고 단정하지 않는다.
+
+후크는 현재 등록된 소유 Work의 입력 ID만 최대 5개씩 알려주고, 원문·도구 결과는 출력하거나 저장하지 않는다. 같은 turn에서는 같은 ID를 다시 알리지 않으며, 아직 처리하지 않은 입력은 다음 turn에서 다시 알릴 수 있다. 보조 알림만으로 입력을 읽음·승인·완료 처리하거나 새 모델을 호출하지 않는다. 기존 queue는 쉬는 Work의 시작 경로로 유지된다. 실제 thread 식별자가 없거나 일치하지 않는 경우와 명시적인 subagent 표시가 있는 경우에는 알림을 건너뛴다. 다른 에이전트는 소유 Work 표식을 처리하지 않는다.
+
+`inputs get`과 `inputs pending`/`wait`의 소유자 검증을 통과한 최초 조회가 `도로 확인`을 기록한다. 최종 답변은 별도 `inputs ack`로 남긴다. `inputs get`의 `timing`은 저장·queue 접수·보조 알림 생성·원문 조회·최종 답변의 Unix 시각이다. 이전 자료의 없는 시각은 `null`로 남기며 과거 지연을 추정하지 않는다. 이는 시스템 시계 기록으로, 시계가 조정된 구간의 차이를 정밀 지연으로 해석하지 않는다. 도구가 끝나지 않는 동안과 후크가 비활성인 환경의 대기열 지연은 이 알림만으로 없앨 수 없다.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+import os
 from pathlib import Path
 import time
 
@@ -9,13 +10,15 @@ from doro.infrastructure.input_store import LocalInputStore
 from doro.infrastructure.storage import LocalStore
 from doro.infrastructure.delivery_store import DeliveryOutbox
 from doro.infrastructure.new_task_store import NewTaskStore
-from doro.domain.models import DoroError
+from doro.infrastructure.delivery_timing import timing_for
+from doro.infrastructure.input_notifications import hook_notice
 from doro.interface.input import read_bounded
 
 
 def add_input_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     inputs = commands.add_parser("inputs", help="Read human native-chat messages without model calls or automatic approvals")
     actions = inputs.add_subparsers(dest="input_action", required=True)
+    actions.add_parser("notify-hook", help="Official PostToolUse hook; only owner-bound input IDs")
     pending = actions.add_parser("pending")
     pending.add_argument("session_id")
     wait = actions.add_parser("wait")
@@ -31,20 +34,20 @@ def add_input_parser(commands: argparse._SubParsersAction[argparse.ArgumentParse
 
 
 def run_inputs(args: argparse.Namespace, root: Path) -> object:
+    if args.input_action == "notify-hook":
+        return hook_notice(root / ".doro", os.environ.get("CODEX_THREAD_ID"))
     store = LocalInputStore(LocalStore(root / ".doro"))
     if args.input_action == "wait":
         return wait_inputs(store, args.session_id, args.owner_thread, args.timeout)
     if args.input_action == "pending":
         return [asdict(note) for note in store.pending(args.session_id, args.owner_thread)]
     if args.input_action == "get":
-        note = store.get(args.note_id)
-        routes = {route.session_id: route.thread_id for route in store.sessions.routes()}
-        if note.owner_thread_id != args.owner_thread or routes.get(note.session_id) != args.owner_thread:
-            raise DoroError("Only the registered owning Work can receive this input")
+        note = store.receive(args.note_id, args.owner_thread)
         delivery = next((item for item in DeliveryOutbox(store.sessions).for_session(note.session_id) if item.input_id == note.id), None)
         request = NewTaskStore(store.sessions).find(note.id)
         return {"input": asdict(note), "delivery": asdict(delivery) if delivery else None,
-                "new_task_request": asdict(request) if request else None}
+                "new_task_request": asdict(request) if request else None,
+                "timing": asdict(timing_for(store.sessions, note.id))}
     return asdict(store.acknowledge(args.note_id, args.owner_thread, read_bounded(args.response, 6000) if args.response else ""))
 
 

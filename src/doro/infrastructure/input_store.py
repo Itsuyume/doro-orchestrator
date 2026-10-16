@@ -9,6 +9,8 @@ from doro.domain.validation import string
 from doro.infrastructure.serde import decode_session
 from doro.infrastructure.storage import LocalStore, session_key
 from doro.infrastructure.delivery_store import initialize_deliveries, queue_delivery, received_delivery
+from doro.infrastructure.delivery_timing import record_timing
+from doro.domain.work_delivery import DeliveryEvent
 
 
 def authorize_ui(connection: sqlite3.Connection, session_id: str, token: str) -> None:
@@ -31,6 +33,7 @@ class LocalInputStore:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("CREATE TABLE IF NOT EXISTS ui_tokens (digest TEXT PRIMARY KEY, session_id TEXT NOT NULL, expires REAL NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS user_inputs (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, owner_thread_id TEXT NOT NULL, text TEXT NOT NULL, after_turn INTEGER NOT NULL, checkpoint_id TEXT NOT NULL, state TEXT NOT NULL, decision TEXT NOT NULL, response TEXT NOT NULL)")
+            connection.execute("CREATE INDEX IF NOT EXISTS pending_work_inputs ON user_inputs(owner_thread_id,state)")
             initialize_deliveries(connection)
 
     def register_ui(self, session_id: str) -> str:
@@ -90,11 +93,24 @@ class LocalInputStore:
             rows = connection.execute("SELECT * FROM user_inputs WHERE session_id=? ORDER BY rowid", (session_key(session_id),)).fetchall()
         return tuple(decode_input(tuple(row)) for row in rows)
 
+    def receive(self, note_id: str, owner: str) -> HumanInput:
+        with self.sessions.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT i.* FROM user_inputs i JOIN owners o ON o.session_id=i.session_id WHERE i.id=? AND i.owner_thread_id=? AND o.thread_id=?",
+                                     (session_key(note_id), session_key(owner), owner)).fetchone()
+            if row is None:
+                raise DoroError("Only the registered owning Work can receive this input")
+            note = decode_input(tuple(row))
+            received_delivery(connection, note.id)
+            if note.state != "read":
+                record_timing(connection, note.id, DeliveryEvent.RECEIVED)
+        return note
+
     def pending(self, session_id: str, owner: str) -> tuple[HumanInput, ...]:
         routes = {route.session_id: route.thread_id for route in self.sessions.routes()}
         if routes.get(session_id) != session_key(owner):
             raise DoroError("Human input must be read by its registered owning Work")
-        return tuple(note for note in self.inputs(session_id) if note.state == "queued")
+        return tuple(self.receive(note.id, owner) for note in self.inputs(session_id) if note.state == "queued")
 
     def acknowledge(self, note_id: str, owner: str, response: str = "") -> HumanInput:
         if len(response) > 6000:
@@ -109,6 +125,9 @@ class LocalInputStore:
                 raise DoroError("Only the owning Work can acknowledge this human input")
             connection.execute("UPDATE user_inputs SET state='read',response=? WHERE id=?", (response, note_id))
             received_delivery(connection, note_id)
+            if note.state != "read":
+                record_timing(connection, note_id, DeliveryEvent.RECEIVED)
+                record_timing(connection, note_id, DeliveryEvent.ACKNOWLEDGED)
         return replace(note, state="read", response=response)
 
 

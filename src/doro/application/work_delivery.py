@@ -1,9 +1,8 @@
 from dataclasses import replace
-import json
 from typing import Protocol
 
 from doro.domain.models import Conversation, HumanInput
-from doro.domain.work_delivery import DeliveryState, QueueFailure, WorkDelivery
+from doro.domain.work_delivery import DeliveryState, QueueFailure, WorkDelivery, input_notice
 
 
 class Outbox(Protocol):
@@ -23,9 +22,7 @@ class WorkDispatcher:
         delivery, claimed = self.outbox.claim(note, retry)
         if not claimed:
             return delivery
-        envelope = {"version": 1, "input_id": note.id, "session_id": note.session_id,
-                    "owner_thread_id": note.owner_thread_id}
-        message = "$doro-orchestration\nDORO_INPUT " + json.dumps(envelope)
+        message = input_notice(note.id, note.session_id, note.owner_thread_id)
         try:
             queue_id = self.queue.enqueue(note.owner_thread_id, message)
         except QueueFailure as error:
