@@ -110,13 +110,21 @@ class Task:
 
 
 @dataclass(frozen=True)
+class WorkRecovery:
+    previous_fingerprint: str
+    fingerprint: str
+    previous_task: Task
+    checkpoint_id: str
+    reason: str
+    turn_index: int
+
+@dataclass(frozen=True)
 class Provider:
     enabled: bool
     command: tuple[str, ...]
     model: str
     effort: str
     max_calls: int
-
 
 @dataclass(frozen=True)
 class Limits:
@@ -131,7 +139,6 @@ class Limits:
     max_tokens: int
     claude_call_usd: float
     session_reported_usd: float
-
 
 @dataclass(frozen=True)
 class Config:
@@ -210,3 +217,4 @@ class Session:
     exchanges: list[Exchange] = field(default_factory=list)
     retry_until_quota: bool = False
     retry_instructions: str = ""
+    recoveries: list[WorkRecovery] = field(default_factory=list)

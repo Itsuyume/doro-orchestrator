@@ -1,7 +1,7 @@
 from dataclasses import asdict
 import json
 
-from doro.domain.models import ApprovalReceipt, Checkpoint, DoroError, Exchange, Session, Turn
+from doro.domain.models import ApprovalReceipt, Checkpoint, DoroError, Exchange, Session, Turn, WorkRecovery
 from doro.domain.validation import boolean, integer, keys, mapping, number, parse_task, string, strings
 
 
@@ -39,6 +39,7 @@ def decode_session(raw: str) -> Session:
     data = mapping(json.loads(raw), "session")
     data.setdefault("retry_until_quota", False)  # v4 records retain the original bounded-call policy.
     data.setdefault("retry_instructions", "")
+    data.setdefault("recoveries", [])  # Legacy sessions stay readable; no recovery or approval is invented.
     missing = set(Session.__dataclass_fields__) - set(data)
     if missing in ({"mode", "checkpoints", "exchanges"}, {"checkpoints", "exchanges"}):
         data.setdefault("mode", "cli")
@@ -65,6 +66,7 @@ def decode_session(raw: str) -> Session:
         [decode_exchange(item) for item in record_list(data["exchanges"], "exchanges")],
         boolean(data["retry_until_quota"], "retry_until_quota"),
         string(data["retry_instructions"], "retry_instructions", empty=True),
+        [decode_recovery(item) for item in record_list(data["recoveries"], "recoveries")],
     )
     if session.mode not in {"cli", "work"}:
         raise DoroError("Invalid stored session mode")
@@ -74,6 +76,15 @@ def decode_session(raw: str) -> Session:
     if session.status == "awaiting_approval" and (not session.checkpoints or session.checkpoints[-1].decision != "pending"):
         raise DoroError("Invalid stored approval wait: no unanswered checkpoint")
     return session
+
+
+def decode_recovery(value: object) -> WorkRecovery:
+    data = mapping(value, "work recovery")
+    keys(data, set(WorkRecovery.__dataclass_fields__), "work recovery")
+    return WorkRecovery(string(data["previous_fingerprint"], "previous_fingerprint"),
+                        string(data["fingerprint"], "fingerprint"), parse_task(data["previous_task"]),
+                        string(data["checkpoint_id"], "checkpoint_id"), string(data["reason"], "reason"),
+                        integer(data["turn_index"], "turn_index", low=1, high=1_000_000))
 
 
 def record_list(value: object, name: str) -> list[object]:
