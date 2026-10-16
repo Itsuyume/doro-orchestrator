@@ -38,13 +38,18 @@ class InputNotificationInstallTests(unittest.TestCase):
         self.assertEqual(len(handlers), 2)
         self.assertEqual(handlers[-1]["hooks"][0]["timeout"], 2)
         self.assertTrue(handlers[-1]["hooks"][0]["async"])
+        guard = after["hooks"]["UserPromptSubmit"]
+        self.assertEqual(len(guard), 1)
+        self.assertFalse(guard[0]["hooks"][0]["async"])
+        self.assertEqual(guard[0], result["guard_handler"])
         installed = self.path.read_bytes()
         self.assertTrue(install(self.codex, self.bridge, apply=True)["installed"])
         self.assertEqual(self.path.read_bytes(), installed)
         self.assertEqual({p.name for p in self.codex.iterdir()}, {"hooks.json", "skill-archives"})
 
     def test_invalid_existing_configuration_and_different_hook_are_never_overwritten(self) -> None:
-        invalid = [[], {"hooks": []}, {"hooks": {"PostToolUse": {}}},
+        invalid = [[], {"hooks": []}, {"hooks": {"PostToolUse": {}}}, {"hooks": {"UserPromptSubmit": {}}},
+                   {"hooks": {"UserPromptSubmit": [{"hooks": [{"command": "old inputs guard-hook"}]}]}},
                    {"hooks": {"PostToolUse": [{"hooks": [{"command": "old inputs notify-hook"}]}]}}]
         for data in invalid:
             self.path.write_text(json.dumps(data))
@@ -71,3 +76,14 @@ class InputNotificationInstallTests(unittest.TestCase):
         linked.symlink_to(self.bridge)
         with self.assertRaises(ValueError):
             install(self.codex, linked, apply=True)
+
+    def test_upgrade_preserves_the_exact_installed_notifier_and_existing_prompt_handlers(self) -> None:
+        notifier = install(self.codex, self.bridge)["handler"]
+        original_prompt = {"hooks": [{"type": "command", "command": "existing prompt hook"}]}
+        original = {"hooks": {"PostToolUse": [notifier], "UserPromptSubmit": [original_prompt]}}
+        self.path.write_text(json.dumps(original))
+        install(self.codex, self.bridge, apply=True)
+        after = json.loads(self.path.read_text())
+        self.assertEqual(after["hooks"]["PostToolUse"], original["hooks"]["PostToolUse"])
+        self.assertEqual(after["hooks"]["UserPromptSubmit"][0], original_prompt)
+        self.assertEqual(len(after["hooks"]["UserPromptSubmit"]), 2)

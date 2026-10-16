@@ -4,6 +4,8 @@ import json
 
 from doro.domain.models import DoroError
 
+INPUT_NOTICE_PREFIX = "$doro-orchestration\nDORO_INPUT "
+
 
 class DeliveryState(str, Enum):
     PENDING = "pending"
@@ -43,7 +45,28 @@ class DeliveryTiming:
 def input_notice(input_id: str, session_id: str, owner_thread_id: str) -> str:
     envelope = {"version": 1, "input_id": input_id, "session_id": session_id,
                 "owner_thread_id": owner_thread_id}
-    return "$doro-orchestration\nDORO_INPUT " + json.dumps(envelope)
+    return INPUT_NOTICE_PREFIX + json.dumps(envelope)
+
+
+def parse_input_notice(prompt: object) -> tuple[str, str, str] | None:
+    """Recognize only one exact transport envelope; mixed human instructions pass through."""
+    if not isinstance(prompt, str) or len(prompt) > 600 or not prompt.startswith(INPUT_NOTICE_PREFIX):
+        return None
+    try:
+        envelope: object = json.loads(prompt[len(INPUT_NOTICE_PREFIX):])
+    except json.JSONDecodeError:
+        return None  # This human prompt is outside the narrowly recognized transport format.
+    expected = {"version", "input_id", "session_id", "owner_thread_id"}
+    if not isinstance(envelope, dict) or set(envelope) != expected:
+        return None
+    if type(envelope["version"]) is not int or envelope["version"] != 1:
+        return None
+    note, session, owner = envelope["input_id"], envelope["session_id"], envelope["owner_thread_id"]
+    if not isinstance(note, str) or not isinstance(session, str) or not isinstance(owner, str):
+        return None
+    if input_notice(note, session, owner) != prompt:
+        return None
+    return note, session, owner
 
 
 class QueueFailure(DoroError):

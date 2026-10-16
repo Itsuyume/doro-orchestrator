@@ -12,6 +12,7 @@ from doro.infrastructure.delivery_store import DeliveryOutbox
 from doro.infrastructure.new_task_store import NewTaskStore
 from doro.infrastructure.delivery_timing import timing_for
 from doro.infrastructure.input_notifications import hook_notice
+from doro.infrastructure.input_queue_guard import guard_notice
 from doro.interface.input import read_bounded
 
 
@@ -19,6 +20,7 @@ def add_input_parser(commands: argparse._SubParsersAction[argparse.ArgumentParse
     inputs = commands.add_parser("inputs", help="Read human native-chat messages without model calls or automatic approvals")
     actions = inputs.add_subparsers(dest="input_action", required=True)
     actions.add_parser("notify-hook", help="Official PostToolUse hook; only owner-bound input IDs")
+    actions.add_parser("guard-hook", help="Official UserPromptSubmit hook; stop handled queue envelopes only")
     pending = actions.add_parser("pending")
     pending.add_argument("session_id")
     wait = actions.add_parser("wait")
@@ -36,6 +38,8 @@ def add_input_parser(commands: argparse._SubParsersAction[argparse.ArgumentParse
 def run_inputs(args: argparse.Namespace, root: Path) -> object:
     if args.input_action == "notify-hook":
         return hook_notice(root / ".doro", os.environ.get("CODEX_THREAD_ID"))
+    if args.input_action == "guard-hook":
+        return guard_notice(root / ".doro", os.environ.get("CODEX_THREAD_ID"))
     store = LocalInputStore(LocalStore(root / ".doro"))
     if args.input_action == "wait":
         return wait_inputs(store, args.session_id, args.owner_thread, args.timeout)
