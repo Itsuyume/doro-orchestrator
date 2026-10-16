@@ -11,8 +11,9 @@ final class ChatController: ObservableObject {
     @Published var shortcutError = ""
     @Published var placementError = ""
     @Published var storageError = ""
+    @Published var historyError = ""
     @Published var requestError = ""
-    var controlError: String { [shortcutError, placementError, storageError, requestError].filter { !$0.isEmpty }.joined(separator: "\n") }
+    var controlError: String { [shortcutError, placementError, storageError, historyError, requestError].filter { !$0.isEmpty }.joined(separator: "\n") }
     @Published var followLatest = true
     @Published var expandedMessages: Set<String> = [] { didSet { scheduleStateSave() } }
     @Published var scrollTarget: String? { didSet { scheduleStateSave() } }
@@ -94,15 +95,20 @@ final class ChatController: ObservableObject {
     func stop() { timer?.invalidate(); timer = nil }
     func unread(_ context: ChatContext) -> Int { max(0, context.event_count - (seen[context.id] ?? context.event_count)) }
 
-    func selectContext(_ id: String) {
-        guard id != selectedSession, contexts.contains(where: { $0.id == id }) else { return }
-        guard switchSession(id) else { return }
-        refresh()
-    }
-
-    @discardableResult func switchSession(_ id: String) -> Bool {
+    @discardableResult func switchSession(_ id: String, openingStack: Bool = false) -> Bool {
+        let restoreHistory = openingStack && !stacks.isListed(id)
+        if id != selectedSession || restoreHistory {
+            guard saveMemory() else { return false }
+        }
+        if restoreHistory {
+            do {
+                try saveHistory(StackHistorySnapshot(removed: stacks.removed.subtracting([id]),
+                                                     undo: lastRemoved.subtracting([id])))
+                historyError = ""
+            } catch { historyError = "목록을 복원하지 못했도로: \(error.localizedDescription)"; return false }
+        }
+        if openingStack { stacks.open(id); lastRemoved.remove(id) }
         guard id != selectedSession else { readError = ""; return true }
-        guard saveMemory() else { return false }
         approvals.dismiss()
         selectedSession = id
         generation += 1
@@ -134,7 +140,7 @@ final class ChatController: ObservableObject {
                 defer { loading = false }
                 do {
                     let value = try await Task.detached { try readContextSnapshot(source) }.value
-                    try updateContexts(value.contexts)
+                    updateContexts(value.contexts)
                     readError = ""
                 } catch { readError = "작업 목록 갱신 실패: \(error.localizedDescription)" }
             }
@@ -149,7 +155,7 @@ final class ChatController: ObservableObject {
             do {
                 let value = try await Task.detached { try readConversation(source) }.value
                 snapshots[id] = value
-                try updateContexts(value.contexts)
+                updateContexts(value.contexts)
                 guard selectedSession == id, epoch == generation else { return }
                 conversation = value
                 synchronizeInputStatus(value)
@@ -163,10 +169,11 @@ final class ChatController: ObservableObject {
         }
     }
 
-    private func updateContexts(_ values: [ChatContext]) throws {
+    private func updateContexts(_ values: [ChatContext]) {
         if contexts.isEmpty { for item in values { seen[item.id] = item.event_count } }
         contexts = values
-        try synchronizeStacks(values)
+        do { try synchronizeStacks(values); historyError = "" }
+        catch { historyError = "목록 이력을 저장하지 못했도로: \(error.localizedDescription)" }
         onApprovalChange?()
     }
 

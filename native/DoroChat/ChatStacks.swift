@@ -12,16 +12,11 @@ extension ChatController {
 
     func openContext(_ id: String) {
         guard contexts.contains(where: { $0.id == id }) else { return }
-        if !stacks.isListed(id) {
-            do { try saveHistory(StackHistorySnapshot(removed: stacks.removed.subtracting([id]), undo: lastRemoved.subtracting([id]))) }
-            catch { readError = "목록을 복원하지 못했도로: \(error.localizedDescription)"; return }
-        }
-        stacks.open(id)
-        lastRemoved.remove(id)
+        guard switchSession(id, openingStack: true) else { return }
         showingTasks = false
-        selectContext(id)
         collapsed = false
         revealPanel()
+        refresh()
     }
 
     func minimizeCurrent() {
