@@ -2,8 +2,11 @@ from concurrent.futures import ThreadPoolExecutor
 import argparse
 from io import StringIO
 import json
+import os
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from uuid import uuid4
@@ -60,10 +63,10 @@ class InputNotificationTests(unittest.TestCase):
         for payload in ("", "null", "[]", "{", "x" * (HOOK_INPUT_LIMIT + 1)):
             with self.assertRaises((DoroError, ValueError)):
                 hook_notice(self.store.root, self.owner, StringIO(payload))
-        for fields in ({"session_id": str(uuid4())}, {"agent_id": str(uuid4())},
-                       {"agent_type": "worker"}, {"hook_event_name": "Stop"}):
+        for fields in ({"session_id": str(uuid4())}, {"agent_id": str(uuid4())}, {"agent_id": ""},
+                       {"agent_id": None}, {"agent_type": "worker"}, {"agent_type": None}, {"hook_event_name": "Stop"}):
             self.assertEqual(self.notify(**fields), {})
-        self.assertEqual(hook_notice(self.store.root, None, StringIO(json.dumps(self.event()))), {})
+        self.assertEqual(hook_notice(self.store.root, None, StringIO(json.dumps(self.event(agent_id=self.owner)))), {})
         self.assertEqual(timing_for(self.store, note.id).notified_at, None)
         self.assertEqual(self.inputs.get(note.id).state, "queued")
         self.assertEqual(self.runner.prompts, [])
@@ -77,7 +80,28 @@ class InputNotificationTests(unittest.TestCase):
         self.assertEqual(self.notify(), {})
         with self.store.connect() as connection:
             self.assertEqual(connection.execute("SELECT count(*) FROM input_notifications").fetchone()[0], 0)
-        self.assertEqual(hook_notice(self.store.root, str(uuid4()), StringIO("not JSON")), {})
+        unknown = str(uuid4())
+        self.assertEqual(hook_notice(self.store.root, unknown, StringIO(json.dumps(self.event(session_id=unknown)))), {})
+
+    def test_cli_root_hook_without_shell_thread_environment_notifies_once(self) -> None:
+        note = self.post()
+        environment = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+        environment.pop("CODEX_THREAD_ID", None)
+        script = ("import argparse,json,sys; from pathlib import Path; "
+                  "from doro.interface.input_cli import run_inputs; "
+                  "print(json.dumps(run_inputs(argparse.Namespace(input_action='notify-hook'),Path(sys.argv[1]))))")
+        command = [sys.executable, "-c", script, str(self.store.root.parent)]
+        result = subprocess.run(command, input=json.dumps(self.event()), text=True, capture_output=True,
+                                env=environment, check=True)
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn(input_notice(note.id, self.session.id, self.owner), context)
+        self.assertNotIn(note.text, context)
+        self.assertIsNotNone(timing_for(self.store, note.id).notified_at)
+        self.assertIsNone(timing_for(self.store, note.id).received_at)
+        self.assertEqual(self.inputs.get(note.id).state, "queued")
+        repeated = subprocess.run(command, input=json.dumps(self.event()), text=True, capture_output=True,
+                                  env=environment, check=True)
+        self.assertEqual(json.loads(repeated.stdout), {})
 
     def test_idle_hook_does_not_take_a_write_lock_and_busy_claim_remains_retryable(self) -> None:
         with self.store.connect() as connection:
