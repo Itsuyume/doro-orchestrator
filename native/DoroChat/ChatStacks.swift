@@ -10,6 +10,21 @@ extension ChatController {
     var pinnedContexts: [ChatContext] { contexts.filter { stacks.contains($0.id) } }
     var otherContexts: [ChatContext] { contexts.filter { stacks.isListed($0.id) && !stacks.contains($0.id) } }
 
+    func isInProgress(_ context: ChatContext) -> Bool {
+        !context.finished || context.needs_input || context.queued_inputs > 0 || sendingSessions.contains(context.id)
+    }
+
+    var listedContexts: [ChatContext] {
+        let visible = pinnedContexts + (historyExpanded ? otherContexts : [])
+        return visible.filter { isInProgress($0) } + visible.filter { !isInProgress($0) }
+    }
+
+    var completedBoundaryID: String? {
+        let rows = listedContexts
+        guard let first = rows.first, isInProgress(first) else { return nil }
+        return rows.first { !isInProgress($0) }?.id
+    }
+
     func openContext(_ id: String) {
         guard contexts.contains(where: { $0.id == id }) else { return }
         guard switchSession(id, openingStack: true) else { return }

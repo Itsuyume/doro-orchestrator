@@ -84,14 +84,17 @@ struct TaskManager: View {
 
     private var conversations: some View {
         ScrollViewReader { proxy in
+            let boundary = controller.completedBoundaryID
             List {
                 if controller.pinnedContexts.isEmpty && controller.otherContexts.isEmpty {
                     Text("대화가 없도로.").font(.system(size: 12)).foregroundStyle(.secondary)
                         .frame(height: TaskListLayout.rowHeight).listRowSeparator(.hidden).listRowBackground(Color.clear)
                 }
-                ForEach(controller.pinnedContexts) { row($0, pinned: true).id($0.id) }
-                if controller.historyExpanded {
-                    ForEach(controller.otherContexts) { row($0, pinned: false).id($0.id) }
+                ForEach(controller.listedContexts) { context in
+                    row(context, pinned: controller.stacks.contains(context.id)).id(context.id)
+                        .overlay(alignment: .top) {
+                            if context.id == boundary { Divider().padding(.horizontal, 8).accessibilityHidden(true) }
+                        }
                 }
             }.listStyle(.plain).scrollContentBackground(.hidden)
                 .environment(\.defaultMinListRowHeight, 0)
@@ -113,9 +116,11 @@ struct TaskManager: View {
         HStack {
             Button { animate { activeSwipe = nil; controller.historyExpanded.toggle() } } label: {
                 Label("지난 대화 · \(controller.otherContexts.count)",
-                      systemImage: controller.historyExpanded ? "chevron.down" : "chevron.right")
+                      systemImage: controller.historyExpanded ? "chevron.up" : "chevron.down")
                     .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.buttonStyle(.plain)
+                .help(controller.historyExpanded ? "지난 대화 접기" : "지난 대화 펼치기")
+                .accessibilityValue(controller.historyExpanded ? "펼쳐짐" : "접힘")
             Menu {
                 Button(selecting ? "선택 완료" : "선택") {
                     animate { activeSwipe = nil; selecting.toggle(); selected = []; controller.historyExpanded = true }

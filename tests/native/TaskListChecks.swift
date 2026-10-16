@@ -17,6 +17,7 @@ struct TaskListChecks {
         precondition(taskListHeight(content: two) > taskListHeight(content: one))
         precondition(taskListHeight(content: 10000) == 620)
         checkThreeRowViewport()
+        checkStatusGrouping()
         let controller = ChatController(command: ["/usr/bin/false", "chat", "A", "--json"])
         controller.display = .panel
         controller.showingTasks = true
@@ -49,6 +50,34 @@ struct TaskListChecks {
             historyExpanded: true, selecting: true, undo: true)
         precondition(controls == three + 3 * TaskListLayout.controlHeight,
                      "History, selection and undo controls cannot disappear inside the scrolling rows")
+    }
+
+    @MainActor static func checkStatusGrouping() {
+        let controller = ChatController(command: ["/usr/bin/false", "chat", "done", "--json"])
+        let done = ChatContext(session_id: "done", label: "Done", status: "완료", needs_input: false,
+            event_count: 1, queued_inputs: 0, finished: true)
+        let running = ChatContext(session_id: "running", label: "Running", status: "진행 중", needs_input: false,
+            event_count: 1, queued_inputs: 0, finished: false)
+        let waiting = ChatContext(session_id: "waiting", label: "Waiting", status: "승인 대기", needs_input: true,
+            event_count: 1, queued_inputs: 0, finished: true)
+        let queued = ChatContext(session_id: "queued", label: "Queued", status: "전달 중", needs_input: false,
+            event_count: 1, queued_inputs: 1, finished: true)
+        controller.contexts = [done, running, waiting, queued]
+        controller.stacks.open(done.id)
+        controller.stacks.open(running.id)
+        controller.historyExpanded = true
+        precondition(controller.listedContexts.map(\.id) == [running.id, waiting.id, queued.id, done.id],
+                     "Progress sorts before completion while preserving order inside each group")
+        precondition(controller.completedBoundaryID == done.id, "The separator belongs to the first completed task")
+        controller.sendingSessions.insert(done.id)
+        precondition(controller.completedBoundaryID == nil, "A locally sending task is still in progress")
+        controller.sendingSessions.remove(done.id)
+        controller.historyExpanded = false
+        precondition(controller.listedContexts.map(\.id) == [running.id, done.id], "Hidden history remains hidden")
+        controller.contexts = [done]
+        precondition(controller.completedBoundaryID == nil, "A single group needs no artificial separator")
+        controller.contexts = []
+        precondition(controller.listedContexts.isEmpty && controller.completedBoundaryID == nil)
     }
 
     static func checkMouseSwipe() {
