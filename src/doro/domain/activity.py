@@ -7,7 +7,7 @@ STATES = {"ready": "준비", "running": "진행 중", "awaiting_approval": "승�
           "cancelled": "종료"}
 PHASES = {"draft": "초안", "review": "Claude 검토", "rebuttal": "도로 반론·보완",
           "recheck": "Claude 재검토", "final": "도로 최종 판단", "decision": "도로 검토 결과 반영",
-          "completed": "도로 최종 판단 완료", "ideas": "AGY 아이디어"}
+          "completed": "도로 최종 판단 완료", "ideas": "AGY 아이디어", "revision": "복구 후 공개 초안"}
 GATES = {"start": "시작 범위", "branch": "중요 분기", "apply": "파일 반영"}
 
 

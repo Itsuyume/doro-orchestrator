@@ -7,6 +7,7 @@ from doro.application.turn_executor import TurnExecutor
 from doro.domain.checkpoints import decide_checkpoint, request_checkpoint, require_approval, start_summary
 from doro.domain.models import Config, DoroError, PlannedTurn, Session, Task
 from doro.domain.work import review_count, validate_work, work_text
+from doro.domain.work_recovery import recover_work
 
 
 class WorkBridge:
@@ -99,6 +100,16 @@ class WorkBridge:
             session = self.store.load(session_id)
             validate_work(self.config, session)
             decide_checkpoint(session, checkpoint_id, decision)
+            self.store.save(session)
+            self.store.export(session)
+            return session
+
+    def recover(self, session_id: str, checkpoint_id: str, expected_state: str,
+                expected_config: str, task: Task, draft: str, reason: str) -> Session:
+        """Record an explicitly reviewed configuration recovery; neither approve nor call an advisor."""
+        with self.store.lock(session_id):
+            session = self.store.load(session_id)
+            recover_work(self.config, session, checkpoint_id, expected_state, expected_config, task, draft, reason)
             self.store.save(session)
             self.store.export(session)
             return session

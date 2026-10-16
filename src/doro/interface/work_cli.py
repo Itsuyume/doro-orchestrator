@@ -12,6 +12,7 @@ from doro.infrastructure.diagnostics import probe
 from doro.infrastructure.model_settings import ModelSettings, SelectedAdvisorRunner
 from doro.infrastructure.storage import LocalStore, validate_owner
 from doro.interface.input import load_task, read_bounded
+from doro.interface.work_recovery_cli import add_recovery_parser, recover_work
 
 
 def add_work_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -51,6 +52,7 @@ def add_work_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser
             action.add_argument("--until-quota", action="store_true", required=True,
                                 help="Remove existing Work interaction ceilings; no call or status reset")
 
+    add_recovery_parser(actions)
 
 def check_claude(config: Config) -> None:
     with tempfile.TemporaryDirectory(prefix="doro-work-auth-") as tmp:
@@ -107,4 +109,6 @@ def run_work(args: argparse.Namespace, config: Config, root: Path) -> dict[str, 
     runner = SelectedAdvisorRunner(config, settings, selected)
     bridge = WorkBridge(config, store, runner,
                         lambda text: print(text, file=sys.stderr, flush=True), lambda: check_claude(config))
-    return status_view(config, execute_work(args, config, bridge, store))
+    result = (recover_work(args, config, bridge, store) if args.work_action == "recover"
+              else execute_work(args, config, bridge, store))
+    return status_view(config, result)
