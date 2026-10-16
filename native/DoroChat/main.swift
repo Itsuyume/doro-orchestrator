@@ -185,7 +185,10 @@ guard command.count >= 3, command.last == "--json", command[command.count - 3] =
     fputs("Launch this local viewer with doro chat <session-id>.\n", stderr)
     exit(1)
 }
-_ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
+guard fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0 else {
+    fputs("Unable to isolate the viewer lease.\n", stderr)
+    exit(1)
+}
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
 let delegate: ChatAppDelegate

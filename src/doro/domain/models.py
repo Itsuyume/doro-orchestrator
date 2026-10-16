@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from doro.domain import model_preferences
 HUMAN_INPUT_LIMIT = 2000
 
 class DoroError(Exception):
@@ -77,15 +78,6 @@ class ChatApproval:
 
 
 @dataclass(frozen=True)
-class ModelSelection:
-    model: str
-    effort: str
-    actual_model: str
-    models: tuple[tuple[str, str], ...]
-    efforts: tuple[tuple[str, str], ...]
-
-
-@dataclass(frozen=True)
 class Conversation:
     version: int
     session_id: str
@@ -101,7 +93,7 @@ class Conversation:
     claude_enabled: bool = False
     agy_enabled: bool = False
     approval: ChatApproval | None = None
-    model_selection: ModelSelection | None = None
+    model_selection: model_preferences.ModelSelection | None = None
     input_limit: int = HUMAN_INPUT_LIMIT
 
 

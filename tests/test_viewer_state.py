@@ -1,8 +1,6 @@
 from dataclasses import asdict
 import json
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
 import unittest
 from uuid import uuid4
@@ -13,7 +11,7 @@ from doro.domain.validation import parse_task
 from doro.infrastructure.config import load_config
 from doro.infrastructure.input_store import LocalInputStore
 from doro.infrastructure.storage import LocalStore
-from doro.infrastructure.viewer_state import viewer_lock, wait_for_ack, write_request
+from doro.infrastructure.viewer_state import wait_for_ack, write_request
 from doro.application.conversation import context_summary, conversation
 from test_orchestration import ExternalRunner
 from test_policy import public_task
@@ -22,24 +20,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ViewerStateTests(unittest.TestCase):
-    def test_single_instance_lock_stays_with_child_and_is_released_on_exit(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            with viewer_lock(root) as descriptor:
-                self.assertIsNotNone(descriptor)
-                child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.buffer.read()"],
-                                         stdin=subprocess.PIPE, pass_fds=(descriptor,))
-            try:
-                with viewer_lock(root) as occupied:
-                    self.assertIsNone(occupied)
-                child.communicate(timeout=5)
-                with viewer_lock(root) as available:
-                    self.assertIsNotNone(available)
-            finally:
-                if child.poll() is None:
-                    child.kill()
-                    child.communicate()
-
     def test_request_updates_only_one_selected_stack_and_tokens_remain_session_bound(self) -> None:
         config = load_config(ROOT / "orchestrator.toml")
         runner = ExternalRunner()

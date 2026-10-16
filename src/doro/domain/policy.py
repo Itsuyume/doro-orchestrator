@@ -31,7 +31,7 @@ def plan_turns(participants: tuple[str, ...], rounds: int) -> tuple[PlannedTurn,
 
 
 def quota_retry(session: Session, provider: str) -> bool:
-    return session.mode == "work" and provider == "claude" and session.retry_until_quota
+    return session.mode == "work" and provider in {"claude", "agy"} and session.retry_until_quota
 
 
 def allow_call(config: Config, session: Session, provider_name: str) -> None:

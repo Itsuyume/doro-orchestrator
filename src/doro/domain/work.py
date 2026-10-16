@@ -3,16 +3,16 @@ from doro.domain.policy import ensure_public
 
 
 def validate_work(config: Config, session: Session) -> None:
-    if config.providers["agy"].enabled:
-        raise DoroError("AGY must remain disabled in the Work bridge")
-    if session.mode != "work" or session.participants != ("work", "claude"):
+    allowed = set(session.task.allowed_providers)
+    expected = ("work", "claude", "agy") if "agy" in allowed else ("work", "claude")
+    if session.mode != "work" or session.participants != expected:
         raise DoroError("This is not a GPT Work-owned session")
     if session.config_fingerprint != config.fingerprint or session.rounds != config.limits.debate_rounds:
         raise DoroError("Configuration or role instructions changed")
-    if session.task.allowed_providers != ("claude",):
-        raise DoroError("Work bridge input must explicitly allow only Claude as the external provider")
-    if set(session.calls) - {"claude"}:
-        raise DoroError("A Work-owned session cannot contain Codex CLI or AGY calls")
+    if "claude" not in allowed or allowed - {"claude", "agy"}:
+        raise DoroError("Work bridge input must explicitly allow its external advisors")
+    if set(session.calls) - allowed or any(turn.provider not in {*allowed, "work"} for turn in session.turns):
+        raise DoroError("A Work-owned session cannot contain an unapproved advisor or Codex CLI call")
     ensure_public(session.task.message + "\n" + session.task.context)
     validate_work_history(session)
 
@@ -26,13 +26,13 @@ def validate_work_history(session: Session) -> None:
         if index == 0:
             continue
         previous = session.turns[index - 1]
-        if turn.provider == "claude" and previous.provider == "work":
-            expected = "review" if reviews == 0 else "recheck"
+        if turn.provider in {"claude", "agy"} and previous.provider == "work":
+            expected = "ideas" if turn.provider == "agy" else "review" if reviews == 0 else "recheck"
             if turn.phase != expected or (not session.retry_until_quota and reviews >= session.rounds):
                 raise DoroError("Unexpected Claude phase or review limit exceeded")
-            reviews += 1
+            reviews += int(turn.provider == "claude")
             continue
-        if turn.provider != "work" or previous.provider != "claude":
+        if turn.provider != "work" or previous.provider not in {"claude", "agy"}:
             raise DoroError("Work/Claude transcript is out of order")
         if turn.phase not in {"rebuttal", "final"} or (turn.phase == "final" and index != len(session.turns) - 1):
             raise DoroError("Invalid Work phase")

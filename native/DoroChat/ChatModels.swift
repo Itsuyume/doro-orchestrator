@@ -44,6 +44,12 @@ struct ModelSelection: Decodable, Sendable {
     let actual_model: String
     let models: [[String]]
     let efforts: [[String]]
+    var provider: String?
+    var enabled: Bool?
+    var ready: Bool?
+    var reason: String?
+    var alternatives: [ModelSelection]?
+    var available: Bool { enabled != false && ready != false }
 }
 
 struct ChatApproval: Decodable, Equatable, Sendable {
@@ -79,11 +85,10 @@ func localCommand(_ command: [String], input: Data? = nil, capability: String? =
     let process = Process()
     process.executableURL = URL(fileURLWithPath: command[0])
     process.arguments = Array(command.dropFirst())
-    if let capability {
-        var environment = ProcessInfo.processInfo.environment
-        environment["DORO_CHAT_CAPABILITY"] = capability
-        process.environment = environment
-    }
+    var environment = ProcessInfo.processInfo.environment
+    environment.removeValue(forKey: "DORO_CHAT_LOCK_FD")
+    environment["DORO_CHAT_CAPABILITY"] = capability
+    process.environment = environment
     let output = Pipe()
     let errors = Pipe()
     process.standardOutput = output

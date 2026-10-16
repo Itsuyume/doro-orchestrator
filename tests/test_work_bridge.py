@@ -5,6 +5,9 @@ import tempfile
 import unittest
 
 from doro.application.work_bridge import WorkBridge
+from doro.application.conversation import conversation
+from doro.domain.activity import activity_title
+from doro.domain.progress import progress
 from doro.domain.models import DoroError
 from doro.domain.validation import parse_task
 from doro.infrastructure.config import load_config
@@ -113,8 +116,38 @@ class WorkBridgeTests(unittest.TestCase):
         config = replace(self.config, providers={**self.config.providers, "agy": agy})
         with tempfile.TemporaryDirectory() as tmp:
             bridge = WorkBridge(config, LocalStore(Path(tmp)), ExternalRunner(), lambda _: None)
-            with self.assertRaisesRegex(DoroError, "AGY"):
-                bridge.start(self.task, "Public draft")
+            session = bridge.start(self.task, "Public draft")
+            bridge.decide(session.id, session.checkpoints[-1].id, "approve")
+            with self.assertRaisesRegex(DoroError, "approved"):
+                bridge.review(session.id, "agy")
+            self.assertEqual(session.participants, ("work", "claude"))
+            self.assertEqual(session.calls, {})
+
+    def test_explicit_three_party_scope_keeps_work_main_and_shares_actual_replies(self) -> None:
+        agy = replace(self.config.providers["agy"], enabled=True)
+        config = replace(self.config, providers={**self.config.providers, "agy": agy})
+        task = replace(self.task, allowed_providers=("claude", "agy"))
+        runner = ExternalRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalStore(Path(tmp))
+            activities: list[str] = []
+            bridge = WorkBridge(config, store, runner, lambda _: activities.append(activity_title(config, store.load(session.id))))
+            session = bridge.start(task, "WORK public draft")
+            self.assertIn("Claude Code, AGY", session.checkpoints[-1].summary)
+            with self.assertRaises(DoroError):
+                bridge.review(session.id, "agy")
+            bridge.decide(session.id, session.checkpoints[-1].id, "approve")
+            reviewed = bridge.review(session.id, "agy")
+            self.assertEqual((progress(config, reviewed)["speaker"], progress(config, reviewed)["phase"]), ("work", "decision"))
+            self.assertEqual(conversation(config, reviewed).messages[-1].sender, "AGY")
+            bridge.reply(session.id, "Work evaluates the actual AGY idea")
+            bridge.review(session.id)
+            final = bridge.finish(session.id, "Work final judgment")
+            self.assertEqual([t.provider for t in final.turns], ["work", "agy", "work", "claude", "work"])
+            self.assertEqual([name for name, _ in runner.prompts], ["agy", "claude"])
+            self.assertIn("Work evaluates the actual AGY idea", runner.prompts[-1][1])
+            self.assertEqual(final.calls, {"agy": 1, "claude": 1})
+            self.assertEqual(activities, ["도로 협업 · AGY 아이디어 중", "도로 협업 · Claude 검토 중"])
 
     def test_pre_approval_work_record_is_readable_but_not_implicitly_authorized(self) -> None:
         runner = ExternalRunner()

@@ -9,7 +9,7 @@ from doro.application.work_bridge import WorkBridge
 from doro.application.status import status_view
 from doro.domain.models import Config, DoroError, OwnerRoute, Session
 from doro.infrastructure.diagnostics import probe
-from doro.infrastructure.model_settings import ModelSettings, SelectedClaudeRunner
+from doro.infrastructure.model_settings import ModelSettings, SelectedAdvisorRunner
 from doro.infrastructure.storage import LocalStore, validate_owner
 from doro.interface.input import load_task, read_bounded
 
@@ -30,6 +30,7 @@ def add_work_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser
         action.add_argument("session_id")
         if name == "review":
             action.add_argument("--send", action="store_true")
+            action.add_argument("--provider", choices=("claude", "agy"), default="claude")
         if name in ("reply", "finish"):
             action.add_argument("--text", type=Path, required=True)
         if name == "checkpoint":
@@ -76,7 +77,7 @@ def execute_work(args: argparse.Namespace, config: Config, bridge: WorkBridge, s
     if args.work_action == "review":
         if not args.send:
             raise DoroError("Work review requires --send; no external call was made")
-        return bridge.review(args.session_id)
+        return bridge.review(args.session_id, args.provider)
     if args.work_action in ("reply", "finish"):
         text = read_bounded(args.text, config.limits.max_response_chars)
         writer = bridge.reply if args.work_action == "reply" else bridge.finish
@@ -100,7 +101,10 @@ def execute_work(args: argparse.Namespace, config: Config, bridge: WorkBridge, s
 
 def run_work(args: argparse.Namespace, config: Config, root: Path) -> dict[str, object]:
     store = LocalStore(root / ".doro")
-    runner = SelectedClaudeRunner(config, ModelSettings(store), getattr(args, "session_id", ""))
+    settings = ModelSettings(store)
+    selected = getattr(args, "session_id", "*")
+    config = settings.work_config(config, selected)
+    runner = SelectedAdvisorRunner(config, settings, selected)
     bridge = WorkBridge(config, store, runner,
                         lambda text: print(text, file=sys.stderr, flush=True), lambda: check_claude(config))
     return status_view(config, execute_work(args, config, bridge, store))

@@ -12,6 +12,7 @@ final class ComposerTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         guard Self.sends(event, composing: hasMarkedText()) else { super.keyDown(with: event); return }
+        guard isEditable, !event.isARepeat else { return }
         onSubmit?()
     }
 }

@@ -8,8 +8,10 @@ def progress(config: Config, session: Session) -> dict[str, object]:
     if session.status == "completed":
         speaker, phase = session.turns[-1].provider, "completed"
     elif session.mode == "work":
-        speaker = "work" if session.turns[-1].provider == "claude" else "claude"
+        speaker = "work" if session.turns[-1].provider in {"claude", "agy"} else "claude"
         phase = "decision" if speaker == "work" else "review" if review_count(session) == 0 else "recheck"
+        if session.status == "running" and session.exchanges and session.exchanges[-1].status == "running":
+            speaker, phase = session.exchanges[-1].provider, session.exchanges[-1].phase
     else:
         plan = plan_turns(session.participants, session.rounds)
         pending = plan[min(len(session.turns), len(plan) - 1)]

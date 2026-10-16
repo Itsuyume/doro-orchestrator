@@ -69,13 +69,23 @@ def claude_model(events: list[dict[str, object]]) -> str:
 
 
 def parse_agy(output: str) -> Reply:
-    data = mapping(json.loads(output), "AGY result")
+    rows = [mapping(json.loads(line), "AGY event") for line in output.splitlines() if line.strip()]
+    if len(rows) == 1 and "event" not in rows[0]:
+        data, model = rows[0], ""
+    else:
+        initial = [mapping(row.get("init"), "AGY init") for row in rows if row.get("event") == "init"]
+        results = [mapping(row.get("result"), "AGY result") for row in rows if row.get("event") == "result"]
+        if len(results) == 1 and results[0].get("status") != "SUCCESS":
+            raise DoroError("AGY failed: " + str(results[0].get("error", results[0].get("status")))[:1000])
+        if len(initial) != 1 or len(results) != 1:
+            raise DoroError("AGY needs one initialization and one final result")
+        data, model = results[0], string(initial[0].get("model"), "AGY CLI model")
     if data.get("status") != "SUCCESS":
-        raise DoroError("AGY did not complete successfully")
+        raise DoroError("AGY did not complete successfully: " + str(data.get("error", data.get("status")))[:1000])
     usage = mapping(data.get("usage"), "usage")
     return Reply(string(data.get("response"), "response"),
                  integer(usage.get("total_tokens"), "total_tokens", low=0, high=10_000_000),
-                 None, string(data.get("conversation_id"), "conversation_id"))
+                 None, string(data.get("conversation_id"), "conversation_id"), model)
 
 
 def decode_reply(provider: str, result: ProcessResult) -> Reply:

@@ -10,7 +10,7 @@ from doro.domain.work import review_count, validate_work, work_text
 
 
 class WorkBridge:
-    """Current GPT Work authors main turns; only Claude is executed externally."""
+    """Current GPT Work authors main turns; only approved advisors execute externally."""
     def __init__(self, config: Config, store: Store, runner: Runner,
                  notify: Callable[[str], None], check_ready: Callable[[], None] | None = None) -> None:
         self.config = config
@@ -19,7 +19,10 @@ class WorkBridge:
         self.check_ready = check_ready
 
     def start(self, task: Task, draft: str, scope: str = "", *, until_quota: bool = True, brief: str = "") -> Session:
-        session = Session(str(uuid4()), task, self.config.fingerprint, ("work", "claude"),
+        if "agy" in task.allowed_providers and not self.config.providers["agy"].enabled:
+            raise DoroError("AGY is disabled; no input scope was expanded")
+        participants = ("work", "claude", "agy") if "agy" in task.allowed_providers else ("work", "claude")
+        session = Session(str(uuid4()), task, self.config.fingerprint, participants,
                           self.config.limits.debate_rounds, mode="work", retry_until_quota=until_quota)
         session.turns.append(work_text(self.config, draft, "draft"))
         validate_work(self.config, session)
@@ -29,20 +32,22 @@ class WorkBridge:
         self.store.export(session)
         return session
 
-    def review(self, session_id: str) -> Session:
+    def review(self, session_id: str, provider: str = "claude") -> Session:
         with self.store.lock(session_id):
             session = self.store.load(session_id)
             validate_work(self.config, session)
             require_approval(session)
+            if provider not in {"claude", "agy"} or provider not in session.task.allowed_providers:
+                raise DoroError("Advisor is not approved for this public packet")
             if session.status == "completed" or session.turns[-1].provider != "work":
-                raise DoroError("Claude review needs a new Work draft/rebuttal; no duplicate call was made")
+                raise DoroError("An advisor review needs a new Work draft/rebuttal; no duplicate call was made")
             if not session.retry_until_quota and review_count(session) >= session.rounds:
                 raise DoroError("Configured review count reached; Work must make the final judgment")
             try:
-                if self.check_ready is not None:
+                if provider == "claude" and self.check_ready is not None:
                     self.check_ready()
-                phase = "review" if review_count(session) == 0 else "recheck"
-                self.executor.perform(session, PlannedTurn("claude", phase))
+                phase = "ideas" if provider == "agy" else "review" if review_count(session) == 0 else "recheck"
+                self.executor.perform(session, PlannedTurn(provider, phase))
                 session.status = "awaiting_work"
                 session.error = ""
                 self.store.save(session)
@@ -62,8 +67,8 @@ class WorkBridge:
             session = self.store.load(session_id)
             validate_work(self.config, session)
             require_approval(session)
-            if session.status != "awaiting_work" or session.turns[-1].provider != "claude":
-                raise DoroError("A Work reply/final needs a completed Claude review")
+            if session.status != "awaiting_work" or session.turns[-1].provider not in {"claude", "agy"}:
+                raise DoroError("A Work reply/final needs a completed advisor review")
             if phase == "rebuttal" and not session.retry_until_quota and review_count(session) >= session.rounds:
                 raise DoroError("Review limit reached; finish with GPT Work's final judgment")
             session.turns.append(work_text(self.config, text, phase))

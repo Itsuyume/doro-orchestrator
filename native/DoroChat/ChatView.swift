@@ -123,7 +123,9 @@ struct ChatView: View {
             }
             HStack {
                 ProviderLight(name: "Claude", enabled: controller.conversation?.claude_enabled)
-                ProviderLight(name: "AGY", enabled: controller.conversation?.agy_enabled)
+                ProviderLight(name: "AGY", enabled: controller.conversation.map { view in
+                    view.agy_enabled && view.model_selection?.alternatives?.first(where: { $0.provider == "agy" })?.available == true
+                })
                 ModelSettingsButton(controller: controller)
                 Spacer()
                 if controller.approvalCount > 0 {

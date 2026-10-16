@@ -11,7 +11,8 @@ from doro.infrastructure.process import SAFE_ENV
 from doro.infrastructure.storage import private_directory, session_key
 from doro.infrastructure.storage import LocalStore
 from doro.infrastructure.pet_swap import PetSwapLedger
-from doro.infrastructure.viewer_state import viewer_lock, wait_for_ack, write_request
+from doro.infrastructure.viewer_instance import instance_owner, runtime_directory, viewer_locks
+from doro.infrastructure.viewer_state import wait_for_ack, write_request
 
 
 def native_sdk(root: Path) -> list[str]:
@@ -69,12 +70,9 @@ def viewer_app(root: Path) -> Path:
 def launch_viewer(root: Path, session_id: str, config_path: Path, display: str = "panel", *,
                   show_tasks: bool = False, intent: str = "open") -> dict[str, object]:
     session_key(session_id)
-    app = viewer_app(root)
     logs = root / ".doro/native"
     private_directory(logs)
     log = logs / (session_id + ".log")
-    command = [str(app / "Contents/MacOS/DoroChat"), sys.executable, str(root / "doro"),
-               "--config", str(config_path.resolve()), "chat", session_id, "--json"]
     env = {key: value for key, value in os.environ.items() if key in SAFE_ENV}
     store = LocalStore(root / ".doro")
     state = PetSwapLedger(store).current()
@@ -85,7 +83,9 @@ def launch_viewer(root: Path, session_id: str, config_path: Path, display: str =
         if not sprite.is_file() or sprite.is_symlink() or sprite.stat().st_size > 20_000_000:
             raise DoroError("The local Doro v2 sprite is missing or invalid; original assets were not changed")
         env["DORO_CHAT_PET_SPRITE"] = str(sprite)
-    with viewer_lock(root) as lock:
+    runtime = runtime_directory()
+    with viewer_locks(runtime) as lock:
+        instance_owner(runtime, root, config_path, claim=lock is not None)
         request = write_request(store, session_id, display, show_tasks=show_tasks, intent=intent)
         env["DORO_CHAT_REQUEST"] = str(request.path)
         if lock is None:
@@ -95,6 +95,9 @@ def launch_viewer(root: Path, session_id: str, config_path: Path, display: str =
         if display in {"hidden", "stop"}:
             return {"reused": lock is None, "session_id": session_id, "display": display,
                     "model_calls": 0, "web_server": False}
+        app = viewer_app(root)
+        command = [str(app / "Contents/MacOS/DoroChat"), sys.executable, str(root / "doro"),
+                   "--config", str(config_path.resolve()), "chat", session_id, "--json"]
         env["DORO_CHAT_LOCK_FD"] = str(lock)
         descriptor = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, "wb") as output:

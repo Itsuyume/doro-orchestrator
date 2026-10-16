@@ -16,7 +16,7 @@ from doro.infrastructure.input_store import LocalInputStore, authorize_ui
 from doro.infrastructure.delivery_store import DeliveryOutbox
 from doro.infrastructure.work_queue import CodexQueue
 from doro.infrastructure.model_settings import ModelSettings
-from doro.domain.validation import keys, mapping, string
+from doro.domain.validation import boolean, keys, mapping, string
 
 
 def add_chat_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -50,14 +50,12 @@ def run_chat(args: argparse.Namespace, config: Config, root: Path) -> object:
     settings = ModelSettings(store)
     if args.set_model:
         data = mapping(json.loads(sys.stdin.buffer.read(2049)), "model selection")
-        keys(data, {"model", "effort"}, "model selection")
-        settings.save(string(data["model"], "model", empty=True), string(data["effort"], "effort"), session.id,
-                      ui_token=os.environ.get("DORO_CHAT_CAPABILITY", ""))
+        save_model_choice(settings, data, session.id)
         return {"saved": True, "applies": "next_review", "model_calls": 0}
     contexts = tuple(context_summary(store.load(sid), label, inputs.inputs(sid)) for sid, label in labels.items())
     if getattr(args, "contexts_json", False):
         return {"version": 1, "contexts": [asdict(item) for item in contexts], "model_calls": 0}
-    view = conversation(config, session, labels.get(session.id, "도로 협업"), inputs.inputs(session.id), session.id in labels, contexts)
+    view = conversation(settings.work_config(config, session.id), session, labels.get(session.id, "도로 협업"), inputs.inputs(session.id), session.id in labels, contexts)
     view = replace(view, model_selection=settings.view(config, session.id))
     view = apply_deliveries(view, DeliveryOutbox(store).for_session(session.id))
     if args.json:
@@ -65,6 +63,22 @@ def run_chat(args: argparse.Namespace, config: Config, root: Path) -> object:
     if args.text:
         return conversation_text(view)
     return launch_viewer(root, session.id, args.config, args.display)
+
+
+def save_model_choice(settings: ModelSettings, data: dict[str, object], session_id: str) -> None:
+    fields = {"model", "effort"} if set(data) == {"model", "effort"} else {"provider", "model", "effort", "enabled"}
+    keys(data, fields, "model selection")
+    model = string(data["model"], "model", empty=True)
+    effort = string(data["effort"], "effort")
+    provider = string(data.get("provider", "claude"), "provider")
+    enabled = boolean(data.get("enabled", True), "enabled")
+    token = os.environ.get("DORO_CHAT_CAPABILITY", "")
+    if provider == "agy":
+        settings.save_agy(model, effort, enabled, session_id, ui_token=token)
+    elif provider == "claude" and enabled:
+        settings.save(model, effort, session_id, ui_token=token)
+    else:
+        raise DoroError("Unsupported provider choice; Claude must remain enabled")
 
 
 def post_input(store: LocalInputStore, session_id: str, root: Path, wake: bool = False) -> object:

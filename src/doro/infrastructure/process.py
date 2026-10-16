@@ -96,7 +96,8 @@ def execute(argv: list[str], prompt: str, cwd: Path, timeout: float, bound: int,
             on_stdout: Callable[[bytes], None] | None = None) -> ProcessResult:
     env = {key: os.environ[key] for key in SAFE_ENV if key in os.environ}
     env.update({"NO_COLOR": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-                "CLAUDE_CODE_DISABLE_AUTO_UPDATE": "1", "CLAUDE_CODE_SKIP_PROMPT_HISTORY": "1"})
+                "CLAUDE_CODE_DISABLE_AUTO_UPDATE": "1", "CLAUDE_CODE_SKIP_PROMPT_HISTORY": "1",
+                "AGY_CLI_DISABLE_AUTO_UPDATE": "true"})
     with tempfile.TemporaryFile() as incoming:
         incoming.write(prompt.encode())
         incoming.seek(0)

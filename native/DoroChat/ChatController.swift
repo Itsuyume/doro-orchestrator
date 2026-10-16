@@ -175,10 +175,10 @@ final class ChatController: ObservableObject {
         submit(session: selectedSession, text: inputText, checkpoint: conversation?.checkpoint_id ?? "", decision: nil)
     }
 
-    func changeModel(_ model: String, effort: String, session: String) async throws {
+    func changeModel(_ model: String, effort: String, session: String, provider: String = "claude", enabled: Bool = true) async throws {
         guard let token = capabilities[session] else { throw ChatReadError.failed("스택 연결을 다시 열어줘도로.") }
         let command = Array(sessionCommand(session).dropLast()) + ["--set-model"]
-        let data = try JSONSerialization.data(withJSONObject: ["model": model, "effort": effort])
+        let data = try JSONSerialization.data(withJSONObject: ["model": model, "effort": effort, "provider": provider, "enabled": enabled])
         _ = try await Task.detached { try localCommand(command, input: data, capability: token) }.value
         refresh()
     }

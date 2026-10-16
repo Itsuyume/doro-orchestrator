@@ -1,7 +1,4 @@
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -84,24 +81,8 @@ def wait_for_ack(receipt: ViewerReceipt, timeout: float = 4) -> None:
     while time.monotonic() < deadline:
         current = mapping(json.loads(receipt.path.read_text()), "viewer request")
         if current.get("request_id") != expected:
-            raise DoroError("A newer viewer request superseded this transition; no second pet was restored")
+            raise DoroError("A newer viewer request superseded this transition")
         if acknowledged(path, receipt):
             return
         time.sleep(0.05)
-    raise DoroError("The existing viewer did not confirm the transition; do not restore a second pet yet")
-
-
-@contextmanager
-def viewer_lock(root: Path) -> Iterator[int | None]:
-    directory = root / ".doro/native"
-    private_directory(directory)
-    descriptor = os.open(directory / "viewer.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    try:
-        acquired = True
-        try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            acquired = False
-        yield descriptor if acquired else None
-    finally:
-        os.close(descriptor)
+    raise DoroError("The existing viewer did not confirm the window action; no second viewer was started")

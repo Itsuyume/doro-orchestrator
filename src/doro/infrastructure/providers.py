@@ -6,6 +6,7 @@ import shutil
 
 from doro.domain.models import Config, DoroError, Reply
 from doro.infrastructure.process import execute
+from doro.infrastructure.agy_public import AGENT, run_public
 from doro.infrastructure.protocol import decode_reply
 from doro.infrastructure.streaming import ClaudeTextStream
 
@@ -44,7 +45,9 @@ def build_command(config: Config, name: str) -> list[str]:
         if provider.effort:
             argv += ["--effort", provider.effort]
     else:
-        argv += ["--sandbox", "--output-format", "json", "--input-format", "text", "--print", "-"]
+        argv += ["--sandbox", "--output-format", "stream-json", "--input-format", "stream-json",
+                 "--disable-slash-commands", "--agent", AGENT, "--new-project",
+                 "--print-timeout", f"{config.limits.timeout_seconds}s"]
         if provider.effort:
             argv += ["--effort", provider.effort]
     if provider.model:
@@ -61,6 +64,10 @@ class CliRunner:
         argv = build_command(self.config, name)  # Disabled gate precedes even PATH lookup.
         if not shutil.which(argv[0]):
             raise DoroError(f"{name} CLI is not installed on PATH")
+        if name == "agy":
+            result = run_public(argv, prompt, self.config.providers[name].model, Path(argv[0]).parent.parent,
+                                timeout, self.config.limits.max_process_bytes)
+            return decode_reply(name, result)
         if name == "codex":
             instructions = cwd / "codex-system.md"
             descriptor = os.open(instructions, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)

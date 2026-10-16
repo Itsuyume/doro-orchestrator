@@ -51,6 +51,7 @@ def start_summary(config: Config, session: Session) -> str:
               if session.retry_until_quota else
               f"최대 검토 {session.rounds}회, 실패 포함 Claude 호출 {config.providers['claude'].max_calls}회, "
               f"예상 비용 예약 상한 ${config.limits.session_reported_usd:.2f}. ")
-    return (f"시작 범위: {session.task.message}\n외부 참가자: Claude Code만. AGY는 꺼짐.\n"
+    advisors = "Claude Code, AGY" if "agy" in session.task.allowed_providers else "Claude Code"
+    return (f"시작 범위: {session.task.message}\n외부 참가자: {advisors}.\n"
             f"{policy}호출당 {config.limits.timeout_seconds}초.\n"
             "아래 공개 입력·초안만 전달. 중요 분기와 실제 파일 반영은 별도 승인. 프로젝트 자동 수정 없음.")

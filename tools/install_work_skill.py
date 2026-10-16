@@ -34,7 +34,7 @@ def install(user_directory: Path, project: Path = ROOT) -> tuple[Path, Path]:
     path.write_text(json.dumps({"version": 1, "project_root": str(project), "skill_root": str(destination),
                                "trigger": "explicit user request during project work",
                                "main": "current GPT Work chat", "external": ["claude"],
-                               "agy_enabled": False, "python_executable": sys.executable,
+                               "optional_external": ["agy"], "python_executable": sys.executable,
                                "launch_path": os.environ.get("PATH", os.defpath)}, ensure_ascii=False, indent=2) + "\n")
     path.chmod(0o600)
     return destination, path

@@ -2,10 +2,10 @@ import AppKit
 
 @main
 struct ComposerChecks {
-    @MainActor static func event(_ flags: NSEvent.ModifierFlags = [], key: UInt16 = 36) -> NSEvent {
+    @MainActor static func event(_ flags: NSEvent.ModifierFlags = [], key: UInt16 = 36, repeatKey: Bool = false) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
             windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
-            isARepeat: false, keyCode: key)!
+            isARepeat: repeatKey, keyCode: key)!
     }
 
     @MainActor static func main() {
@@ -20,6 +20,11 @@ struct ComposerChecks {
         precondition(submissions == 1 && editor.string == "첫 줄 🇰🇷", "Enter submits without inserting a line break")
         editor.keyDown(with: event(.shift))
         precondition(submissions == 1 && editor.string.hasSuffix("\n"), "Shift+Enter edits without sending")
+        editor.keyDown(with: event(repeatKey: true))
+        editor.isEditable = false
+        editor.keyDown(with: event())
+        precondition(submissions == 1, "A held Enter or disabled editor cannot send")
+        editor.isEditable = true
         for flags: NSEvent.ModifierFlags in [.shift, .option, .control, .command] {
             precondition(!ComposerTextView.sends(event(flags), composing: false))
         }

@@ -98,7 +98,7 @@ def run_local_control(args: argparse.Namespace, config: Config, root: Path) -> o
         "inputs": lambda: run_inputs(args, root),
         "approvals": lambda: run_approvals(args, config, LocalStore(root / ".doro")),
         "pet-swap": lambda: run_pet_swap(args, root),
-        "model": lambda: run_model(args, root),
+        "model": lambda: run_model(args, root, config),
         "window": lambda: run_window(args, root),
     }
     return actions[args.command]()

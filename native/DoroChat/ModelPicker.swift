@@ -6,29 +6,53 @@ struct ModelPicker: View {
     let session: String
     @State private var model = ""
     @State private var effort = "medium"
+    @State private var provider = "claude"
+    @State private var enabled = true
     @State private var saving = false
-    @State private var status = "다음 Claude 검토부터 적용되도로."
+    @State private var status = ""
+    private var choices: [ModelSelection] { [selection] + (selection.alternatives ?? []) }
+    private var selected: ModelSelection? { choices.first { ($0.provider ?? "claude") == provider } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Claude 모델").font(.system(size: 16, weight: .semibold))
-            Picker("모델", selection: $model) {
-                ForEach(selection.models, id: \.self) { option in Text(option[1]).tag(option[0]) }
+            Picker("AI", selection: $provider) {
+                ForEach(choices, id: \.provider) { choice in
+                    Text(choice.provider == "agy" ? "AGY" : "Claude").tag(choice.provider ?? "claude")
+                }
+            }.pickerStyle(.segmented).labelsHidden()
+            if let choice = selected {
+                if provider == "agy" { Toggle("사용", isOn: $enabled) }
+                Picker("모델", selection: $model) {
+                    ForEach(choice.models, id: \.self) { option in Text(option[1]).tag(option[0]) }
+                }
+                Picker("생각 깊이", selection: $effort) {
+                    ForEach(choice.efforts, id: \.self) { option in Text(option[1]).tag(option[0]) }
+                }
+                if !choice.actual_model.isEmpty {
+                    Text((provider == "agy" ? "최근 CLI 모델: " : "최근 실제 응답: ") + choice.actual_model)
+                        .font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                if provider == "agy", let reason = choice.reason {
+                    Text(reason).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(choice.ready == false ? Color.orange : Color.secondary)
+                }
             }
-            Picker("생각 깊이", selection: $effort) {
-                ForEach(selection.efforts, id: \.self) { option in Text(option[1]).tag(option[0]) }
-            }
-            Text(selection.actual_model.isEmpty ? "이전 응답 모델: 기록 없음" : "최근 실제 응답: " + selection.actual_model)
-                .font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
-            Text("GPT는 현재 Work 설정을 따르도로. AGY는 꺼져 있도로.")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
             HStack {
-                Text(status).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
+                if !status.isEmpty { Text(status).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true) }
                 Spacer()
-                Button("저장") { save() }.disabled(saving)
+                Button("저장") { save() }.disabled(saving || selected == nil)
             }
         }.padding(16).frame(width: 320)
-            .onAppear { model = selection.model; effort = selection.effort }
+            .onAppear { loadChoice() }
+            .onChange(of: provider) { _, _ in loadChoice() }
+    }
+
+    private func loadChoice() {
+        guard let selected else { return }
+        model = selected.model
+        effort = selected.effort
+        enabled = selected.enabled ?? true
+        status = ""
     }
 
     private func save() {
@@ -36,8 +60,8 @@ struct ModelPicker: View {
         Task {
             defer { saving = false }
             do {
-                try await controller.changeModel(model, effort: effort, session: session)
-                status = "저장됨 · 다음 검토에 사용"
+                try await controller.changeModel(model, effort: effort, session: session, provider: provider, enabled: enabled)
+                status = "저장됨"
             } catch { status = "저장 실패: " + error.localizedDescription }
         }
     }
@@ -48,7 +72,7 @@ struct ModelSettingsButton: View {
     @State private var showing = false
     var body: some View {
         Button { showing.toggle() } label: { Image(systemName: "slider.horizontal.3") }
-            .buttonStyle(.plain).help("모델 설정").accessibilityLabel("Claude 모델과 생각 깊이 선택")
+            .buttonStyle(.plain).help("모델 설정").accessibilityLabel("모델과 생각 깊이 선택")
             .popover(isPresented: $showing) {
                 if let selection = controller.conversation?.model_selection {
                     ModelPicker(controller: controller, selection: selection, session: controller.selectedSession)
