@@ -1,6 +1,6 @@
 interface:
   display_name: "도로 프로젝트 협업"
-  short_description: "오케스트레이션 켜기·협업창 열기, 원래 GPT와 Claude 연결, 입력·승인"
+  short_description: "협업창 열기·입력·승인, GPT 본작업·Claude 검토·AGY 아이디어"
   default_prompt: "$doro-orchestration 협업창 켜줘. 새 Work나 모델 호출 없이 기존 작업 목록을 바로 열어줘."
 policy:
   allow_implicit_invocation: true
