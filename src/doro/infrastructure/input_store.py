@@ -4,7 +4,7 @@ import secrets
 import sqlite3
 import time
 
-from doro.domain.models import DoroError, HumanInput
+from doro.domain.models import DoroError, HUMAN_INPUT_LIMIT, HumanInput
 from doro.domain.validation import string
 from doro.infrastructure.serde import decode_session
 from doro.infrastructure.storage import LocalStore, session_key
@@ -49,8 +49,8 @@ class LocalInputStore:
         session_key(session_id)
         session_key(client_id)
         string(text, "human input")
-        if len(text) > 2000 or "\0" in text or decision not in {"", "approve", "reject"}:
-            raise DoroError("Human input must be within 2000 characters without NUL")
+        if len(text) > HUMAN_INPUT_LIMIT or "\0" in text or decision not in {"", "approve", "reject"}:
+            raise DoroError(f"Human input must be within {HUMAN_INPUT_LIMIT} characters without NUL")
         with self.sessions.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             authorize_ui(connection, session_id, token)

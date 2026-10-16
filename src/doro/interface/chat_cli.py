@@ -27,6 +27,7 @@ def add_chat_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser
                       help="One native viewer: integrated pet, transcript panel, or hidden; no model call")
     formats = chat.add_mutually_exclusive_group()
     formats.add_argument("--json", action="store_true", help="Read the typed local display snapshot")
+    formats.add_argument("--contexts-json", action="store_true", help="Read task metadata only; no transcript or model")
     formats.add_argument("--text", action="store_true", help="Print the same actual conversation as text")
     formats.add_argument("--post", action="store_true", help="Record native UI input; --wake queues its existing Work")
     formats.add_argument("--retry-delivery", action="store_true", help="Retry a definitively failed native Work delivery")
@@ -54,6 +55,8 @@ def run_chat(args: argparse.Namespace, config: Config, root: Path) -> object:
                       ui_token=os.environ.get("DORO_CHAT_CAPABILITY", ""))
         return {"saved": True, "applies": "next_review", "model_calls": 0}
     contexts = tuple(context_summary(store.load(sid), label, inputs.inputs(sid)) for sid, label in labels.items())
+    if getattr(args, "contexts_json", False):
+        return {"version": 1, "contexts": [asdict(item) for item in contexts], "model_calls": 0}
     view = conversation(config, session, labels.get(session.id, "도로 협업"), inputs.inputs(session.id), session.id in labels, contexts)
     view = replace(view, model_selection=settings.view(config, session.id))
     view = apply_deliveries(view, DeliveryOutbox(store).for_session(session.id))

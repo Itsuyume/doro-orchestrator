@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
-
+HUMAN_INPUT_LIMIT = 2000
 
 class DoroError(Exception):
     """A visible failure at a policy, persistence, or external process boundary."""
-
 
 @dataclass(frozen=True)
 class OwnerRoute:
@@ -103,6 +102,7 @@ class Conversation:
     agy_enabled: bool = False
     approval: ChatApproval | None = None
     model_selection: ModelSelection | None = None
+    input_limit: int = HUMAN_INPUT_LIMIT
 
 
 @dataclass(frozen=True)

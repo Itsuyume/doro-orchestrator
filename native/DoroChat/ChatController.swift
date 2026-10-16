@@ -10,11 +10,12 @@ final class ChatController: ObservableObject {
     @Published var readError = ""
     @Published var shortcutError = ""
     @Published var placementError = ""
-    var controlError: String { [shortcutError, placementError].filter { !$0.isEmpty }.joined(separator: "\n") }
+    @Published var storageError = ""
+    @Published var requestError = ""
+    var controlError: String { [shortcutError, placementError, storageError, requestError].filter { !$0.isEmpty }.joined(separator: "\n") }
     @Published var followLatest = true
-    @Published var expandedMessages: Set<String> = []
-    @Published var scrollTarget: String?
-    private(set) var requestedScrollTarget: String?
+    @Published var expandedMessages: Set<String> = [] { didSet { scheduleStateSave() } }
+    @Published var scrollTarget: String? { didSet { scheduleStateSave() } }
     @Published var collapsed = false {
         didSet {
             guard oldValue != collapsed else { return }
@@ -39,7 +40,7 @@ final class ChatController: ObservableObject {
     var requestedApprovalSession: String?
     var onApprovalChange: (() -> Void)?
     var onApprovalOpen: (() -> Void)?
-    @Published var inputText = ""
+    @Published var inputText = "" { didSet { scheduleStateSave() } }
     @Published var inputStatus = ""
     @Published var sendingSessions: Set<String> = []
     @Published private var seen: [String: Int] = [:]
@@ -53,21 +54,31 @@ final class ChatController: ObservableObject {
     var capabilities: [String: String] = [:]
     private var timer: Timer?
     private var loading = false
-    private var requestID = ""
+    var appliedRequestID = ""
     private var generation = 0
+    var saveGeneration = 0
+    private var lastBackgroundRead = -Double.infinity
+    let persistState: (ContextState) throws -> Void
+    let recoverPersistence: ((ContextState) throws -> Void)?
     var sending: Bool { sendingSessions.contains(selectedSession) }
     var canQuit: Bool { sendingSessions.isEmpty }
     var approvalCount: Int { contexts.filter(\.needs_input).count }
     var currentLabel: String { contexts.first { $0.id == selectedSession }?.label ?? "도로 협업" }
 
     init(command: [String], history: StackHistorySnapshot = StackHistorySnapshot(),
-         saveHistory: @escaping (StackHistorySnapshot) throws -> Void = { _ in }) {
+         saveHistory: @escaping (StackHistorySnapshot) throws -> Void = { _ in },
+         state: ContextState = ContextState(), persistState: @escaping (ContextState) throws -> Void = { _ in },
+         recoverPersistence: ((ContextState) throws -> Void)? = nil) {
         self.command = command
         self.saveHistory = saveHistory
+        self.persistState = persistState
+        self.recoverPersistence = recoverPersistence
+        memories = state.memories
         stacks = StackCatalog(removed: history.removed)
         lastRemoved = history.undo
-        selectedSession = command[command.count - 2]
+        selectedSession = state.selectedSession ?? command[command.count - 2]
         approvals = ApprovalPresentation(seen: Set(UserDefaults(suiteName: "local.doro.approvals")?.stringArray(forKey: "seen") ?? []))
+        restoreMemory()
     }
 
     func start() {
@@ -84,74 +95,50 @@ final class ChatController: ObservableObject {
 
     func selectContext(_ id: String) {
         guard id != selectedSession, contexts.contains(where: { $0.id == id }) else { return }
-        saveMemory()
+        guard switchSession(id) else { return }
+        refresh()
+    }
+
+    @discardableResult func switchSession(_ id: String) -> Bool {
+        guard id != selectedSession else { readError = ""; return true }
+        guard saveMemory() else { return false }
         approvals.dismiss()
         selectedSession = id
         generation += 1
-        let memory = memories[id] ?? ContextMemory()
+        restoreMemory()
+        conversation = snapshots[id]
+        readError = ""
+        return true
+    }
+
+    private func restoreMemory() {
+        let memory = memories[selectedSession] ?? ContextMemory()
         inputText = memory.text
         inputStatus = memory.status
         expandedMessages = memory.expanded
         scrollTarget = memory.scrollTarget
-        requestedScrollTarget = memory.scrollTarget
         followLatest = memory.scrollTarget == nil
-        conversation = snapshots[id]
-        readError = ""
-        refresh()
-    }
-
-    func saveMemory() {
-        var memory = memories[selectedSession] ?? ContextMemory()
-        memory.text = inputText
-        memory.status = inputStatus
-        memory.expanded = expandedMessages
-        memory.scrollTarget = scrollTarget
-        memories[selectedSession] = memory
-    }
-
-    private func applyRequest() throws {
-        let request = try readViewerRequest()
-        guard request.request_id != requestID else { return }
-        if request.display == .stop && !sendingSessions.isEmpty { return }
-        requestID = request.request_id
-        capabilities = request.tokens
-        if let intent = request.intent, intent != .open {
-            display = .hidden
-            approvals.dismiss()
-            if intent == .minimize { collapsed = true }
-            onDisplay?(display)
-            try acknowledgeViewerRequest(request)
-            return
-        }
-        if request.display == .integrated || request.display == .panel {
-            if request.show_tasks != true { stacks.open(request.session_id) }
-            showingTasks = request.show_tasks ?? false
-        }
-        if request.session_id != selectedSession {
-            saveMemory()
-            selectedSession = request.session_id
-            generation += 1
-            let memory = memories[selectedSession] ?? ContextMemory()
-            inputText = memory.text
-            inputStatus = memory.status
-            expandedMessages = memory.expanded
-            scrollTarget = memory.scrollTarget
-            requestedScrollTarget = memory.scrollTarget
-            followLatest = memory.scrollTarget == nil
-            conversation = snapshots[selectedSession]
-        }
-        display = request.display
-        approvals.dismiss()
-        collapsed = false
-        onDisplay?(display)
-        try acknowledgeViewerRequest(request)
-        if display == .stop { onStop?() }
     }
 
     func refresh() {
-        do { try applyRequest() }
-        catch { readError = "연결 갱신 실패: \(error.localizedDescription)"; return }
-        guard !loading, display != .hidden, display != .stop else { return }
+        do { try applyRequest(); requestError = "" }
+        catch { requestError = "연결 갱신 실패: \(error.localizedDescription)" }
+        guard !loading, display != .stop else { return }
+        if display == .hidden {
+            guard ProcessInfo.processInfo.systemUptime - lastBackgroundRead >= 3 else { return }
+            lastBackgroundRead = ProcessInfo.processInfo.systemUptime
+            loading = true
+            let source = Array(sessionCommand(selectedSession).dropLast()) + ["--contexts-json"]
+            Task {
+                defer { loading = false }
+                do {
+                    let value = try await Task.detached { try readContextSnapshot(source) }.value
+                    try updateContexts(value.contexts)
+                    readError = ""
+                } catch { readError = "작업 목록 갱신 실패: \(error.localizedDescription)" }
+            }
+            return
+        }
         loading = true
         let id = selectedSession
         let epoch = generation
@@ -161,20 +148,25 @@ final class ChatController: ObservableObject {
             do {
                 let value = try await Task.detached { try readConversation(source) }.value
                 snapshots[id] = value
-                if contexts.isEmpty { for item in value.contexts { seen[item.id] = item.event_count } }
-                contexts = value.contexts
-                try synchronizeStacks(value.contexts)
+                try updateContexts(value.contexts)
                 guard selectedSession == id, epoch == generation else { return }
                 conversation = value
                 synchronizeInputStatus(value)
                 synchronizeApproval(value)
-                if !collapsed { seen[id] = contexts.first { $0.id == id }?.event_count ?? 0 }
+                if !collapsed && display != .hidden { seen[id] = contexts.first { $0.id == id }?.event_count ?? 0 }
                 readError = ""
             } catch {
                 if requestedApprovalSession == id { requestedApprovalSession = nil }
                 if selectedSession == id { readError = "대화 갱신 실패: \(error.localizedDescription)" }
             }
         }
+    }
+
+    private func updateContexts(_ values: [ChatContext]) throws {
+        if contexts.isEmpty { for item in values { seen[item.id] = item.event_count } }
+        contexts = values
+        try synchronizeStacks(values)
+        onApprovalChange?()
     }
 
     func sessionCommand(_ id: String) -> [String] { Array(command.dropLast(2)) + [id, "--json"] }

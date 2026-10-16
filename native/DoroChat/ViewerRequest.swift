@@ -14,8 +14,7 @@ func acknowledgeViewerRequest(_ request: ViewerRequest) throws {
     let data = try JSONSerialization.data(withJSONObject: ["request_id": request.request_id,
                                                           "display": request.display.rawValue,
                                                           "intent": (request.intent ?? .open).rawValue])
-    try data.write(to: path, options: .atomic)
-    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
+    try NativeStateFile(path: path, maxBytes: 2000).write(data)
 }
 
 struct ViewerRequest: Decodable, Sendable {
@@ -41,10 +40,11 @@ func readViewerRequest() throws -> ViewerRequest {
     return request
 }
 
-struct ContextMemory {
+struct ContextMemory: Codable {
     var text = ""
     var status = ""
     var lastInputID: String?
+    var lastInputDecision: ApprovalDecision?
     var submissions = SubmissionLedger()
     var expanded: Set<String> = []
     var scrollTarget: String?

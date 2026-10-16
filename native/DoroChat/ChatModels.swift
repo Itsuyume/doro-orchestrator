@@ -1,6 +1,6 @@
 import Foundation
 
-enum ApprovalDecision: String, Hashable, Sendable { case approve, reject }
+enum ApprovalDecision: String, Codable, Hashable, Sendable { case approve, reject }
 
 struct ChatMessage: Decodable, Identifiable, Sendable {
     let id: String
@@ -30,6 +30,12 @@ struct Conversation: Decodable, Sendable {
     let agy_enabled: Bool
     let approval: ChatApproval?
     let model_selection: ModelSelection?
+    var input_limit: Int?
+}
+
+struct ContextSnapshot: Decodable, Sendable {
+    let version: Int
+    let contexts: [ChatContext]
 }
 
 struct ModelSelection: Decodable, Sendable {
@@ -102,6 +108,12 @@ func readConversation(_ command: [String]) throws -> Conversation {
     let view = try JSONDecoder().decode(Conversation.self, from: localCommand(command))
     guard view.version == 1 else { throw ChatReadError.failed("표시 형식 버전을 확인할 수 없도로.") }
     return view
+}
+
+func readContextSnapshot(_ command: [String]) throws -> ContextSnapshot {
+    let value = try JSONDecoder().decode(ContextSnapshot.self, from: localCommand(command))
+    guard value.version == 1 else { throw ChatReadError.failed("작업 목록 버전을 확인해줘도로.") }
+    return value
 }
 
 struct DeliveryReceipt: Decodable, Sendable {

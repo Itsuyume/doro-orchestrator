@@ -21,7 +21,11 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let path = URL(fileURLWithPath: request).deletingLastPathComponent().appendingPathComponent("stack-history.json")
         let history = StackHistoryStore(path: path)
-        controller = ChatController(command: command, history: try history.load(), saveHistory: history.save)
+        let persistence = ContextPersistence(store: ContextStateStore(file: NativeStateFile(path: path.deletingLastPathComponent()
+            .appendingPathComponent("context-state.json"), maxBytes: 2_000_000)))
+        controller = ChatController(command: command, history: try history.load(), saveHistory: history.save,
+            state: persistence.initialState, persistState: persistence.save, recoverPersistence: persistence.recover)
+        controller.storageError = persistence.loadError
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

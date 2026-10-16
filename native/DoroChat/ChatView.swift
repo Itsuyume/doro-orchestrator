@@ -93,6 +93,11 @@ struct ChatView: View {
                     .font(.system(size: 12)).foregroundStyle(.red)
                     .textSelection(.enabled).padding(8).frame(maxWidth: .infinity, alignment: .leading)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                if controller.canRecoverState {
+                    Button("원본 보관 후 복구") { controller.recoverState() }
+                        .buttonStyle(.plain).font(.system(size: 12))
+                        .help("기존 초안 파일은 보관하고 현재 입력을 새로 저장해도로. 이전 전송을 자동 재시도하지 않도로.")
+                }
             }
             if controller.showingTasks { TaskManager(controller: controller) }
             else if let view = controller.conversation {
@@ -153,22 +158,33 @@ struct ChatView: View {
             .contentShape(Rectangle())
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
             .clipShape(RoundedRectangle(cornerRadius: 18))
-            .scrollPosition(id: $controller.scrollTarget)
-            .defaultScrollAnchor(.bottom)
+            .scrollPosition(id: readingPosition, anchor: .top)
+            .defaultScrollAnchor(controller.scrollTarget == nil ? .bottom : .top)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 24
             } action: { _, atBottom in
-                if userScrolling { controller.followLatest = atBottom }
+                if userScrolling {
+                    controller.followLatest = atBottom
+                    if atBottom { controller.scrollTarget = nil }
+                }
             }
             .onScrollPhaseChange { _, phase, context in
                 let active = phase == .tracking || phase == .interacting || phase == .decelerating
                 if active || userScrolling {
                     let geometry = context.geometry
                     controller.followLatest = geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 24
+                    if controller.followLatest { controller.scrollTarget = nil }
                 }
                 userScrolling = active
             }
-            .onAppear { proxy.scrollTo(controller.requestedScrollTarget ?? "latest", anchor: .bottom) }
+            .onAppear {
+                let target = controller.scrollTarget
+                guard target != view.messages.first?.id else { return }
+                DispatchQueue.main.async {
+                    guard controller.selectedSession == view.session_id else { return }
+                    proxy.scrollTo(target ?? "latest", anchor: target == nil ? .bottom : .top)
+                }
+            }
             .onChange(of: view.messages.last?.text) { _, _ in
                 if controller.followLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
@@ -176,6 +192,12 @@ struct ChatView: View {
                 if controller.followLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
         }.id(view.session_id)
+    }
+
+    private var readingPosition: Binding<String?> {
+        Binding(get: { controller.scrollTarget }, set: { target in
+            if userScrolling && !controller.followLatest { controller.scrollTarget = target }
+        })
     }
 
     private func expansion(_ id: String) -> Binding<Bool> {

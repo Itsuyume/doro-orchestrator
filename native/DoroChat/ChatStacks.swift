@@ -38,6 +38,7 @@ extension ChatController {
 
     func requestStop() {
         guard canQuit else { readError = "메시지 전달을 확인한 뒤 종료해줘도로."; return }
+        guard prepareToStop() else { return }
         onStop?()
     }
 
