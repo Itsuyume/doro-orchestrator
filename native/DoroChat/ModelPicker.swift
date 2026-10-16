@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ModelPicker: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var controller: ChatController
     let selection: ModelSelection
     let session: String
@@ -40,9 +41,12 @@ struct ModelPicker: View {
             HStack {
                 if !status.isEmpty { Text(status).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true) }
                 Spacer()
+                if saving { ProgressView().controlSize(.small) }
                 Button("저장") { save() }.disabled(saving || selected == nil)
+                    .keyboardShortcut(.defaultAction)
             }
         }.padding(16).frame(width: 320)
+            .disabled(saving)
             .onAppear { loadChoice() }
             .onChange(of: provider) { _, _ in loadChoice() }
     }
@@ -56,12 +60,13 @@ struct ModelPicker: View {
     }
 
     private func save() {
+        guard !saving else { return }
         saving = true
         Task {
             defer { saving = false }
             do {
                 try await controller.changeModel(model, effort: effort, session: session, provider: provider, enabled: enabled)
-                status = "저장됨"
+                dismiss()
             } catch { status = "저장 실패: " + error.localizedDescription }
         }
     }

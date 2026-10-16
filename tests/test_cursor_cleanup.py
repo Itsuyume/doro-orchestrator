@@ -61,16 +61,25 @@ class CursorCleanupTests(unittest.TestCase):
         self.assertEqual(self.run_event("PostToolUse")["status"], "screen_use_continues")
         self.assertEqual(self.run_event("PostToolUse", tool="mcp__cua_repl__js_reset")["status"], "cleaned")
 
-    def test_preexisting_unknown_cursor_and_invalid_payload_never_signal(self) -> None:
+    def test_older_overlay_is_cleaned_after_all_registered_users_finish(self) -> None:
         self.visible = {8}
         self.run_event("PreToolUse")
         self.visible.add(9)
-        self.assertEqual(self.run_event("Stop")["status"], "deferred_preexisting_cursors")
-        self.assertEqual(self.cleanups, 0)
+        self.assertEqual(self.run_event("Stop")["status"], "cleaned")
+        self.assertEqual(self.cleanups, 1)
         for event in ({}, {"hook_event_name": "Stop", "session_id": None}, self.event("Stop", turn="")):
             with self.assertRaises(ValueError):
                 lifecycle.handle(event, self.state, lambda: self.visible.copy(), self.cleanup)
+        self.assertEqual(self.cleanups, 1)
+
+    def test_ended_session_release_unblocks_deferred_cleanup_without_touching_a_live_user(self) -> None:
+        self.run_event("PreToolUse", session="ended", turn="manual")
+        self.run_event("PreToolUse", session="live")
+        self.visible = {1, 2}
+        self.assertEqual(self.run_event("Stop", session="live")["status"], "deferred_other_screen_use")
         self.assertEqual(self.cleanups, 0)
+        self.assertEqual(self.run_event("SessionEnd", session="ended")["status"], "cleaned")
+        self.assertEqual(self.cleanups, 1)
 
     def test_cleanup_failure_is_visible_and_transaction_is_retryable(self) -> None:
         self.run_event("PreToolUse")

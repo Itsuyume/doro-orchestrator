@@ -88,8 +88,10 @@ class ModelSettings:
 
 class SelectedAdvisorRunner:
     """Snapshot the next-call choice inside the existing Work execution lock."""
-    def __init__(self, config: Config, settings: ModelSettings, session_id: str) -> None:
+    def __init__(self, config: Config, settings: ModelSettings, session_id: str,
+                 keep_running: Callable[[], bool] | None = None) -> None:
         self.config, self.settings, self.session_id = config, settings, session_id
+        self.keep_running = keep_running
 
     def call(self, name: str, prompt: str, cwd: Path, timeout: float,
              on_text: Callable[[str], None] | None = None) -> Reply:
@@ -98,7 +100,7 @@ class SelectedAdvisorRunner:
         config = self.settings.work_config(self.config, self.session_id)
         if name == "claude":
             config = selected_config(config, *self.settings.choice(config, self.session_id))
-        reply = CliRunner(config).call(name, prompt, cwd, timeout, on_text)
+        reply = CliRunner(config, self.keep_running).call(name, prompt, cwd, timeout, on_text)
         expected = config.providers[name].model
         if expected and reply.model != expected:
             raise DoroError(f"Requested model {expected}, actual {reply.model or 'unknown'}; response not adopted")

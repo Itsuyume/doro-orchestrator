@@ -56,8 +56,9 @@ def build_command(config: Config, name: str) -> list[str]:
 
 
 class CliRunner:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, keep_running: Callable[[], bool] | None = None) -> None:
         self.config = config
+        self.keep_running = keep_running
 
     def call(self, name: str, prompt: str, cwd: Path, timeout: float,
              on_text: Callable[[str], None] | None = None) -> Reply:
@@ -66,7 +67,7 @@ class CliRunner:
             raise DoroError(f"{name} CLI is not installed on PATH")
         if name == "agy":
             result = run_public(argv, prompt, self.config.providers[name].model, Path(argv[0]).parent.parent,
-                                timeout, self.config.limits.max_process_bytes)
+                                timeout, self.config.limits.max_process_bytes, self.keep_running)
             return decode_reply(name, result)
         if name == "codex":
             instructions = cwd / "codex-system.md"
@@ -76,7 +77,7 @@ class CliRunner:
             argv += ["-c", "model_instructions_file=" + json.dumps(str(instructions))]
         stream = ClaudeTextStream(on_text) if name == "claude" and on_text is not None else None
         result = execute(argv, prompt, cwd, timeout, self.config.limits.max_process_bytes,
-                         stream.feed if stream is not None else None)
+                         stream.feed if stream is not None else None, self.keep_running)
         if stream is not None:
             stream.finish()
         return decode_reply(name, result)

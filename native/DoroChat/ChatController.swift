@@ -13,7 +13,8 @@ final class ChatController: ObservableObject {
     @Published var storageError = ""
     @Published var historyError = ""
     @Published var requestError = ""
-    var controlError: String { [shortcutError, placementError, storageError, historyError, requestError].filter { !$0.isEmpty }.joined(separator: "\n") }
+    @Published var interactionError = ""
+    var controlError: String { [shortcutError, placementError, storageError, historyError, requestError, interactionError].filter { !$0.isEmpty }.joined(separator: "\n") }
     @Published var followLatest = true
     @Published var expandedMessages: Set<String> = [] { didSet { scheduleStateSave() } }
     @Published var scrollTarget: String? { didSet { scheduleStateSave() } }
@@ -26,10 +27,9 @@ final class ChatController: ObservableObject {
     }
     @Published var stacks = StackCatalog()
     @Published var showingTasks = false { didSet { if oldValue != showingTasks { onStackLayout?() } } }
-    @Published var openTasksExpanded = true
     @Published var historyExpanded = false { didSet { if oldValue != historyExpanded { onStackLayout?() } } }
+    @Published var historySelecting = false { didSet { if oldValue != historySelecting { onStackLayout?() } } }
     @Published var lastRemoved: Set<String> = []
-    @Published var taskContentHeight = 0.0 { didSet { if abs(oldValue - taskContentHeight) > 1 { onStackLayout?() } } }
     let saveHistory: (StackHistorySnapshot) throws -> Void
     @Published var approvals = ApprovalPresentation() {
         didSet {
@@ -50,16 +50,17 @@ final class ChatController: ObservableObject {
     var onDisplay: ((ViewerDisplay) -> Void)?
     var onStop: (() -> Void)?
     var onStackLayout: (() -> Void)?
+    var onReadComplete: (() -> Void)?
     private let command: [String]
     var memories: [String: ContextMemory] = [:]
-    private var snapshots: [String: Conversation] = [:]
+    private var snapshots = ConversationCache()
     var capabilities: [String: String] = [:]
     private var timer: Timer?
     private var loading = false
     var appliedRequestID = ""
     private var generation = 0
     var saveGeneration = 0
-    private var lastBackgroundRead = -Double.infinity
+    private var refreshPolicy = RefreshPolicy()
     let persistState: (ContextState) throws -> Void
     let recoverPersistence: ((ContextState) throws -> Void)?
     var sending: Bool { sendingSessions.contains(selectedSession) }
@@ -84,11 +85,13 @@ final class ChatController: ObservableObject {
     }
 
     func start() {
+        guard timer == nil else { return }
         refresh()
         let poll = Timer(timeInterval: 0.75, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refresh() }
+            Task { @MainActor [weak self] in self?.refresh(force: false) }
         }
         timer = poll
+        poll.tolerance = 0.2
         RunLoop.main.add(poll, forMode: .common)
     }
 
@@ -127,20 +130,27 @@ final class ChatController: ObservableObject {
         followLatest = memory.scrollTarget == nil
     }
 
-    func refresh() {
-        do { try applyRequest(); requestError = "" }
-        catch { requestError = "연결 갱신 실패: \(error.localizedDescription)" }
+    func refresh(force: Bool = true) {
+        do { try applyRequest(); if !requestError.isEmpty { requestError = "" } }
+        catch {
+            let message = "연결 갱신 실패: \(error.localizedDescription)"
+            if requestError != message { requestError = message }
+        }
         guard !loading, display != .stop else { return }
-        if display == .hidden {
-            guard ProcessInfo.processInfo.systemUptime - lastBackgroundRead >= 3 else { return }
-            lastBackgroundRead = ProcessInfo.processInfo.systemUptime
+        let revision: [String]?
+        do { revision = try conversationRevision(command) }
+        catch { readError = "대화 변경 확인 실패: \(error.localizedDescription)"; return }
+        guard refreshPolicy.shouldRead(now: ProcessInfo.processInfo.systemUptime, revision: revision,
+                                       background: display == .hidden || collapsed, force: force) else { return }
+        if display == .hidden || collapsed {
             loading = true
             let source = Array(sessionCommand(selectedSession).dropLast()) + ["--contexts-json"]
             Task {
-                defer { loading = false }
+                defer { loading = false; onReadComplete?() }
                 do {
                     let value = try await Task.detached { try readContextSnapshot(source) }.value
                     updateContexts(value.contexts)
+                    refreshPolicy.complete(revision: revision)
                     readError = ""
                 } catch { readError = "작업 목록 갱신 실패: \(error.localizedDescription)" }
             }
@@ -151,7 +161,7 @@ final class ChatController: ObservableObject {
         let epoch = generation
         let source = sessionCommand(id)
         Task {
-            defer { loading = false; if selectedSession != id { refresh() } }
+            defer { loading = false; onReadComplete?(); if selectedSession != id { refresh() } }
             do {
                 let value = try await Task.detached { try readConversation(source) }.value
                 snapshots[id] = value
@@ -160,6 +170,7 @@ final class ChatController: ObservableObject {
                 conversation = value
                 synchronizeInputStatus(value)
                 synchronizeApproval(value)
+                refreshPolicy.complete(revision: revision)
                 if !collapsed && display != .hidden { seen[id] = contexts.first { $0.id == id }?.event_count ?? 0 }
                 readError = ""
             } catch {

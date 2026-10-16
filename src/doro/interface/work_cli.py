@@ -10,6 +10,7 @@ from doro.application.status import status_view
 from doro.domain.models import Config, DoroError, OwnerRoute, Session
 from doro.infrastructure.diagnostics import probe
 from doro.infrastructure.model_settings import ModelSettings, SelectedAdvisorRunner
+from doro.infrastructure.window_policy import collaboration_guard
 from doro.infrastructure.storage import LocalStore, validate_owner
 from doro.interface.input import load_task, read_bounded
 
@@ -104,7 +105,8 @@ def run_work(args: argparse.Namespace, config: Config, root: Path) -> dict[str, 
     settings = ModelSettings(store)
     selected = getattr(args, "session_id", "*")
     config = settings.work_config(config, selected)
-    runner = SelectedAdvisorRunner(config, settings, selected)
+    guard = collaboration_guard(store.root) if args.work_action == "review" else None
+    runner = SelectedAdvisorRunner(config, settings, selected, guard)
     bridge = WorkBridge(config, store, runner,
                         lambda text: print(text, file=sys.stderr, flush=True), lambda: check_claude(config))
     return status_view(config, execute_work(args, config, bridge, store))

@@ -16,6 +16,7 @@ from doro.infrastructure.config import load_config
 from doro.infrastructure.diagnostics import doctor, require_auth
 from doro.infrastructure.providers import CliRunner
 from doro.infrastructure.storage import LocalStore
+from doro.infrastructure.window_policy import collaboration_guard
 from doro.interface.input import load_task
 from doro.interface.work_cli import add_work_parser, run_work
 from doro.interface.console import watch_progress
@@ -79,10 +80,11 @@ def preview(config: Config, session: Session) -> None:
 
 
 def execute_session(config: Config, store: LocalStore, session: Session) -> None:
+    guard = collaboration_guard(store.root)
     require_auth(config)
     for role in config.roles.values():
         ensure_public(role)
-    runner = Orchestrator(config, store, CliRunner(config),
+    runner = Orchestrator(config, store, CliRunner(config, guard),
                           lambda text: print(text, file=sys.stderr, flush=True))
     result = runner.run(session)
     final = result.turns[-1]

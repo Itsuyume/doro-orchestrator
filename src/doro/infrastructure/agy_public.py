@@ -1,5 +1,6 @@
 """AGY public-text boundary: verified client, fresh workspace and no inherited customizations."""
 import hashlib
+from collections.abc import Callable
 import json
 from pathlib import Path
 import re
@@ -126,7 +127,8 @@ class AgyStreamGuard:
             raise DoroError("AGY 최종 응답을 확인하지 못했도로.")
 
 
-def run_public(argv: list[str], prompt: str, model: str, root: Path, timeout: float, bound: int) -> ProcessResult:
+def run_public(argv: list[str], prompt: str, model: str, root: Path, timeout: float, bound: int,
+               keep_running: Callable[[], bool] | None = None) -> ProcessResult:
     ensure_public(prompt)
     binary = verified_binary(root, hash_file=True)
     check_customizations(Path.home())
@@ -135,7 +137,8 @@ def run_public(argv: list[str], prompt: str, model: str, root: Path, timeout: fl
     with tempfile.TemporaryDirectory(prefix="doro-agy-public-") as tmp:
         cwd = Path(tmp)
         started = time.monotonic()
-        plugins = execute([str(binary), "plugins", "list", "--json"], "", cwd, min(timeout, 15), 100000)
+        plugins = execute([str(binary), "plugins", "list", "--json"], "", cwd, min(timeout, 15), 100000,
+                          keep_running=keep_running)
         if plugins.returncode or json.loads(plugins.stdout) != []:
             raise DoroError("AGY 플러그인이 있거나 확인하지 못했도로. 검토 후 다시 연결해줘도로.")
         agent = cwd / ".agents/agents"
@@ -150,7 +153,7 @@ def run_public(argv: list[str], prompt: str, model: str, root: Path, timeout: fl
             raise DoroError("AGY preflight exceeded its deadline; no model prompt was sent")
         verified_binary(root, hash_file=True)
         check_customizations(Path.home())
-        result = execute(argv, data, cwd, remaining, bound, stream.feed)
+        result = execute(argv, data, cwd, remaining, bound, stream.feed, keep_running)
         if result.returncode == 0:
             stream.finish()
         return result

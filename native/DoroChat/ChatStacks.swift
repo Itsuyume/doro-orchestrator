@@ -25,6 +25,11 @@ extension ChatController {
         collapsed = true
     }
 
+    func collapseToDock() {
+        if !showingTasks { stacks.open(selectedSession) }
+        collapsed = true
+    }
+
     func hidePanel() {
         display = .hidden
         approvals.dismiss()
@@ -47,9 +52,10 @@ extension ChatController {
 
     func toggleChat() {
         if !collapsed { minimizeCurrent(); return }
-        if stacks.contains(selectedSession) { showingTasks = false }
-        else if let first = pinnedContexts.first { openContext(first.id); return }
-        else { showingTasks = true }
+        if !showingTasks && !stacks.contains(selectedSession) {
+            if let first = pinnedContexts.first { openContext(first.id); return }
+            showingTasks = true
+        }
         collapsed = false
         revealPanel()
     }

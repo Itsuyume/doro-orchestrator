@@ -27,7 +27,9 @@ extension ChatController {
     }
 
     var taskPanelHeight: Double {
-        taskListHeight(content: taskContentHeight)
+        taskListHeight(content: TaskListLayout.contentHeight(open: pinnedContexts.count,
+            history: otherContexts.count, historyExpanded: historyExpanded,
+            selecting: historySelecting, undo: !lastRemoved.isEmpty))
     }
 }
 

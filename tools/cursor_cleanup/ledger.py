@@ -19,7 +19,6 @@ def connect(path: Path) -> Iterator[sqlite3.Connection]:
     try:
         with connection:
             connection.execute("CREATE TABLE IF NOT EXISTS leases (session TEXT, turn TEXT, PRIMARY KEY(session,turn))")
-            connection.execute("CREATE TABLE IF NOT EXISTS baseline (id INTEGER PRIMARY KEY)")
             connection.execute("CREATE TABLE IF NOT EXISTS audit (created TEXT DEFAULT CURRENT_TIMESTAMP, result TEXT)")
             connection.execute("BEGIN IMMEDIATE")
             yield connection
@@ -27,11 +26,7 @@ def connect(path: Path) -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
-def begin(connection: sqlite3.Connection, session: str, turn: str, visible: set[int]) -> None:
-    active = connection.execute("SELECT COUNT(*) FROM leases").fetchone()
-    if active is None or active[0] == 0:
-        connection.execute("DELETE FROM baseline")
-        connection.executemany("INSERT INTO baseline VALUES (?)", [(item,) for item in visible])
+def begin(connection: sqlite3.Connection, session: str, turn: str) -> None:
     connection.execute("INSERT OR IGNORE INTO leases VALUES (?,?)", (session, turn))
 
 
@@ -49,8 +44,8 @@ def remaining(connection: sqlite3.Connection) -> int:
     return int(row[0])
 
 
-def protected(connection: sqlite3.Connection) -> set[int]:
-    return {int(row[0]) for row in connection.execute("SELECT id FROM baseline")}
+def active(connection: sqlite3.Connection) -> list[dict[str, str]]:
+    return [{"session": str(row[0]), "turn": str(row[1])} for row in connection.execute("SELECT session,turn FROM leases")]
 
 
 def record(connection: sqlite3.Connection, status: str, before: int, after: int) -> dict[str, str | int]:

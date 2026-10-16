@@ -78,10 +78,9 @@ struct ChatView: View {
         }
         .foregroundStyle(Color.black.opacity(0.86))
         .padding(6)
+        .background(controller.collapsed ? Color.clear : ChatSurface.panel, in: RoundedRectangle(cornerRadius: 16))
         .overlay {
-            if controller.collapsed, controller.display == .panel {
-                WindowDragHandle(label: "대화 목록", onTap: { controller.toggleChat() })
-            }
+            if !controller.collapsed { RoundedRectangle(cornerRadius: 16).strokeBorder(ChatSurface.border, lineWidth: 0.75) }
         }
         .preferredColorScheme(.light)
     }
@@ -120,6 +119,9 @@ struct ChatView: View {
                 }
                 ContextSelector(controller: controller)
                 WindowDragHandle().frame(maxWidth: .infinity).frame(height: 20)
+                Button { controller.collapseToDock() } label: {
+                    Image(systemName: "chevron.up").frame(width: 28, height: 24).contentShape(Rectangle())
+                }.buttonStyle(.plain).help("대화 접기").accessibilityLabel("대화 접기 · dock만 남기기")
             }
             HStack {
                 ProviderLight(name: "Claude", enabled: controller.conversation?.claude_enabled)
@@ -142,7 +144,7 @@ struct ChatView: View {
                     .help(controller.canQuit ? "종료 · 메뉴 아이콘도 닫기" : "메시지 전달 확인 중")
                     .disabled(!controller.canQuit)
             }.font(.system(size: 11))
-        }.padding(9).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }.padding(9).background(ChatSurface.chrome, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func transcript(_ view: Conversation) -> some View {
@@ -158,7 +160,7 @@ struct ChatView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .background(ChatSurface.panel, in: RoundedRectangle(cornerRadius: 18))
             .clipShape(RoundedRectangle(cornerRadius: 18))
             .scrollPosition(id: readingPosition, anchor: .top)
             .defaultScrollAnchor(controller.scrollTarget == nil ? .bottom : .top)

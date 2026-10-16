@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 enum ApprovalDecision: String, Codable, Hashable, Sendable { case approve, reject }
 
@@ -81,7 +82,7 @@ enum ChatReadError: LocalizedError {
     }
 }
 
-func localCommand(_ command: [String], input: Data? = nil, capability: String? = nil) throws -> Data {
+func localCommand(_ command: [String], input: Data? = nil, capability: String? = nil, timeout: Double = 15) throws -> Data {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: command[0])
     process.arguments = Array(command.dropFirst())
@@ -96,6 +97,17 @@ func localCommand(_ command: [String], input: Data? = nil, capability: String? =
     let incoming = Pipe()
     process.standardInput = input == nil ? FileHandle.nullDevice : incoming
     try process.run()
+    let deadline = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+    deadline.schedule(deadline: .now() + timeout)
+    deadline.setEventHandler {
+        guard process.isRunning else { return }
+        process.terminate()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(300)) {
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
+    }
+    deadline.resume()
+    defer { deadline.setEventHandler(handler: nil); deadline.cancel() }
     if let input {
         try incoming.fileHandleForWriting.write(contentsOf: input)
         try incoming.fileHandleForWriting.close()
@@ -103,6 +115,9 @@ func localCommand(_ command: [String], input: Data? = nil, capability: String? =
     let data = output.fileHandleForReading.readDataToEndOfFile()
     let errorData = errors.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
+    guard process.terminationReason == .exit else {
+        throw ChatReadError.failed("로컬 명령이 중단됐도로. 대기 한도는 \(Int(timeout))초이도로. 저장·전달 상태를 확인해줘도로.")
+    }
     guard process.terminationStatus == 0 else {
         throw ChatReadError.failed(String(decoding: errorData, as: UTF8.self))
     }

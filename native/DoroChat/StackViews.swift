@@ -20,44 +20,48 @@ struct StackTray: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "rectangle.stack")
-            Text("대화")
-            Spacer(minLength: 6)
+            HStack(spacing: 6) {
+                Image(systemName: "rectangle.stack")
+                Text("대화").lineLimit(1).fixedSize()
+                Spacer(minLength: 0)
+            }.overlay { WindowDragHandle(label: "대화 펼치기", onTap: { controller.toggleChat() }) }
             if controller.approvalCount > 0 {
-                Text("\(controller.approvalCount)").foregroundStyle(Color.orange)
+                Text(controller.approvalCount > 99 ? "99+" : "\(controller.approvalCount)").foregroundStyle(Color.orange)
+                    .monospacedDigit().lineLimit(1).fixedSize()
+                    .accessibilityLabel("승인 대기 \(controller.approvalCount)개")
             } else if controller.pinnedContexts.contains(where: { controller.unread($0) > 0 }) {
                 Circle().fill(Color.orange).frame(width: 5, height: 5)
             }
-            Image(systemName: "chevron.up").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+            Button { controller.toggleChat() } label: {
+                Image(systemName: "chevron.down").frame(width: 24, height: 24).contentShape(Rectangle())
+            }.buttonStyle(.plain).help("대화 펼치기").accessibilityLabel("대화 펼치기")
+            Button { controller.minimizeCurrent() } label: {
+                Image(systemName: "chevron.up").frame(width: 24, height: 24).contentShape(Rectangle())
+            }.buttonStyle(.plain).help("메뉴 막대로 숨기기").accessibilityLabel("메뉴 막대로 숨기기 · 협업 유지")
         }.font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 12).frame(width: 176, height: 34)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 10).frame(width: 212, height: 34)
+            .background(ChatSurface.panel, in: RoundedRectangle(cornerRadius: 10))
+            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(ChatSurface.border, lineWidth: 0.75) }
     }
 }
 
 struct TaskManager: View {
     @ObservedObject var controller: ChatController
     @Environment(\.accessibilityReduceMotion) private var reducedMotion
-    @State private var selecting = false
+    private var selecting: Bool {
+        get { controller.historySelecting }
+        nonmutating set { controller.historySelecting = newValue }
+    }
     @State private var selected: Set<String> = []
     @State private var activeSwipe: String?
 
-    private var contentHeight: Double {
-        TaskListLayout.contentHeight(open: controller.pinnedContexts.count, expanded: controller.openTasksExpanded,
-            history: controller.otherContexts.count, historyExpanded: controller.historyExpanded,
-            selecting: selecting, undo: !controller.lastRemoved.isEmpty)
-    }
-
     var body: some View {
         List {
-            openHeader
-            if controller.openTasksExpanded {
-                if controller.pinnedContexts.isEmpty {
-                    Text("열어 둔 대화가 없도로.").font(.system(size: 12)).foregroundStyle(.secondary)
-                        .frame(height: TaskListLayout.rowHeight).listRowSeparator(.hidden)
-                }
-                ForEach(controller.pinnedContexts) { row($0, pinned: true) }
+            if controller.pinnedContexts.isEmpty && controller.otherContexts.isEmpty {
+                Text("대화가 없도로.").font(.system(size: 12)).foregroundStyle(.secondary)
+                    .frame(height: TaskListLayout.rowHeight).listRowSeparator(.hidden)
             }
+            ForEach(controller.pinnedContexts) { row($0, pinned: true) }
             if !controller.otherContexts.isEmpty {
                 historyHeader
                 if controller.historyExpanded {
@@ -75,31 +79,16 @@ struct TaskManager: View {
         }.listStyle(.plain).scrollContentBackground(.hidden)
             .environment(\.defaultMinListRowHeight, 0)
             .contentMargins(.vertical, TaskListLayout.verticalInset, for: .scrollContent)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .background(ChatSurface.panel, in: RoundedRectangle(cornerRadius: 14))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .onAppear { controller.taskContentHeight = contentHeight }
-            .onChange(of: contentHeight) { _, value in controller.taskContentHeight = value }
-            .onChange(of: controller.otherContexts.map(\.id)) { _, ids in selected.formIntersection(ids) }
+            .onChange(of: controller.otherContexts.map(\.id)) { _, ids in
+                selected.formIntersection(ids)
+                if ids.isEmpty { selecting = false }
+            }
             .onExitCommand {
                 if activeSwipe != nil { activeSwipe = nil }
                 else if selecting { selecting = false; selected = [] }
             }
-    }
-
-    private var openHeader: some View {
-        Button { animate { activeSwipe = nil; controller.openTasksExpanded.toggle() } } label: {
-            HStack {
-                Text("열어 둔 대화").font(.system(size: 12, weight: .semibold))
-                Spacer()
-                Image(systemName: "chevron.up")
-                    .rotationEffect(.degrees(controller.openTasksExpanded ? 0 : 180))
-                    .frame(width: 28, height: 24).contentShape(Rectangle())
-            }.contentShape(Rectangle())
-        }.buttonStyle(.plain)
-            .accessibilityLabel(controller.openTasksExpanded ? "열어 둔 대화 접기" : "열어 둔 대화 펼치기")
-            .help(controller.openTasksExpanded ? "대화 접기" : "대화 펼치기")
-            .frame(height: TaskListLayout.controlHeight)
-            .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 10)).listRowSeparator(.hidden)
     }
 
     private var historyHeader: some View {

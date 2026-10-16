@@ -13,7 +13,10 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var menuBar: MenuBarControl?
     private var panelDragging: PanelDragGesture?
     private var shortcut: GlobalShortcut?
+    private var outsideCollapse: OutsideCollapse?
     private var waitingForMenu = false
+    private var hasReadSnapshot = false
+    private var waitingForSnapshot = false
 
     init(command: [String]) throws {
         guard let request = ProcessInfo.processInfo.environment["DORO_CHAT_REQUEST"] else {
@@ -43,9 +46,9 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                               styleMask: [.borderless, .resizable, .nonactivatingPanel],
                               backing: .buffered, defer: false)
         window.title = "도로 펫 협업"
-        window.backgroundColor = NSColor.black.withAlphaComponent(0.01)
+        window.backgroundColor = .clear
         window.isOpaque = false
-        window.hasShadow = false
+        window.hasShadow = true
         window.hidesOnDeactivate = false
         window.isMovableByWindowBackground = false
         window.minSize = NSSize(width: 320, height: 400)
@@ -67,6 +70,7 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.setFrameOrigin(NSPoint(x: area.maxX - 410, y: max(area.minY, area.midY - 295)))
         }
         self.window = window
+        do { outsideCollapse = try OutsideCollapse(controller: controller) } catch { controller.interactionError = error.localizedDescription }
         approvalWindow = ApprovalWindow(controller: controller)
         controller.onApprovalChange = { [weak self] in
             guard let self else { return }
@@ -79,6 +83,7 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self else { return }
             self.resize(collapsed: self.controller.collapsed)
         }
+        controller.onReadComplete = { [weak self] in self?.didReadSnapshot() }
         controller.onDisplay = { [weak self] display in self?.show(display) }
         controller.onStop = { NSApp.terminate(nil) }
         do { shortcut = try GlobalShortcut { [weak self] in self?.openTasks() } }
@@ -87,7 +92,13 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
         controller.start()
     }
-
+    private func didReadSnapshot() {
+        hasReadSnapshot = true
+        resize(collapsed: controller.collapsed)
+        guard waitingForSnapshot else { return }
+        waitingForSnapshot = false
+        show(controller.display)
+    }
     private func installMenu() {
         let menu = NSMenu()
         let applicationItem = NSMenuItem()
@@ -106,11 +117,11 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(editItem)
         NSApp.mainMenu = menu
     }
-
     private func show(_ display: ViewerDisplay) {
         guard let window else { return }
         approvalWindow?.update(anchor: window)
         if display == .hidden || display == .stop { waitingForMenu = false; window.orderOut(nil); return }
+        if !hasReadSnapshot { waitingForSnapshot = true; return }
         if display == .panel, !placeAtMenuBar(resetOffset: true) {
             if waitingForMenu { return }
             waitingForMenu = true
@@ -127,7 +138,6 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-
     private func togglePanel() {
         if controller.display == .hidden { openTasks() }
         else { controller.hidePanel() }
@@ -159,9 +169,9 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         wasShowingTasks = controller.showingTasks
         let count = controller.pinnedContexts.count
         let compactHeight = controller.display == .integrated ? 95 : 46
-        let compactWidth = controller.display == .integrated ? (count == 0 ? 94 : 258) : 200
-        window.minSize = NSSize(width: collapsed ? CGFloat(compactWidth) : 320,
-                                height: collapsed ? CGFloat(compactHeight) : tasks ? 130 : 400)
+        let compactWidth = controller.display == .integrated ? (count == 0 ? 94 : 282) : 224
+        configurePanelSizing(window, collapsed: collapsed, taskList: tasks,
+                             compact: NSSize(width: CGFloat(compactWidth), height: CGFloat(compactHeight)))
         let height = min(collapsed ? CGFloat(compactHeight) : tasks ? CGFloat(controller.taskPanelHeight) : expandedSize.height, visible.height)
         let width = min(collapsed ? CGFloat(compactWidth) : tasks ? 390 : expandedSize.width, visible.width)
         if controller.display == .panel {
@@ -182,6 +192,7 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         shortcut?.stop()
         menuBar?.stop()
+        outsideCollapse?.stop()
         NotificationCenter.default.removeObserver(self)
         controller.stop()
     }

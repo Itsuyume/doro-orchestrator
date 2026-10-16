@@ -56,7 +56,7 @@ def read_chunk(selector: selectors.BaseSelector, key: selectors.SelectorKey,
 
 
 def collect(process: subprocess.Popen[bytes], timeout: float, bound: int,
-            on_stdout: Callable[[bytes], None] | None) -> ProcessResult:
+            on_stdout: Callable[[bytes], None] | None, keep_running: Callable[[], bool] | None = None) -> ProcessResult:
     assert process.stdout is not None and process.stderr is not None
     chunks: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
     deadline = time.monotonic() + timeout
@@ -64,7 +64,9 @@ def collect(process: subprocess.Popen[bytes], timeout: float, bound: int,
     with selectors.DefaultSelector() as selector:
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-        while selector.get_map():
+        while selector.get_map() or process.poll() is None:
+            if keep_running is not None and not keep_running():
+                raise DoroError("도로협업이 종료돼 외부 호출을 중단했도로. 부분 응답은 채택하지 않도로.")
             if time.monotonic() >= deadline:
                 raise DoroError("CLI timed out; isolated process group terminated")
             for key, _ in selector.select(min(0.1, max(0, deadline - time.monotonic()))):
@@ -79,13 +81,16 @@ def collect(process: subprocess.Popen[bytes], timeout: float, bound: int,
 
 
 def run_process(argv: list[str], cwd: Path, env: dict[str, str], incoming: int,
-                timeout: float, bound: int, on_stdout: Callable[[bytes], None] | None) -> ProcessResult:
+                timeout: float, bound: int, on_stdout: Callable[[bytes], None] | None,
+                keep_running: Callable[[], bool] | None = None) -> ProcessResult:
+    if keep_running is not None and not keep_running():
+        raise DoroError("도로협업이 꺼져 있어 외부 호출을 차단했도로.")
     try:
         with subprocess.Popen(argv, cwd=cwd, env=env, stdin=incoming,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               start_new_session=True) as process:
             try:
-                return collect(process, timeout, bound, on_stdout)
+                return collect(process, timeout, bound, on_stdout, keep_running)
             finally:
                 terminate(process)
     except OSError as error:
@@ -93,7 +98,8 @@ def run_process(argv: list[str], cwd: Path, env: dict[str, str], incoming: int,
 
 
 def execute(argv: list[str], prompt: str, cwd: Path, timeout: float, bound: int,
-            on_stdout: Callable[[bytes], None] | None = None) -> ProcessResult:
+            on_stdout: Callable[[bytes], None] | None = None,
+            keep_running: Callable[[], bool] | None = None) -> ProcessResult:
     env = {key: os.environ[key] for key in SAFE_ENV if key in os.environ}
     env.update({"NO_COLOR": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
                 "CLAUDE_CODE_DISABLE_AUTO_UPDATE": "1", "CLAUDE_CODE_SKIP_PROMPT_HISTORY": "1",
@@ -101,4 +107,4 @@ def execute(argv: list[str], prompt: str, cwd: Path, timeout: float, bound: int,
     with tempfile.TemporaryFile() as incoming:
         incoming.write(prompt.encode())
         incoming.seek(0)
-        return run_process(argv, cwd, env, incoming.fileno(), timeout, bound, on_stdout)
+        return run_process(argv, cwd, env, incoming.fileno(), timeout, bound, on_stdout, keep_running)

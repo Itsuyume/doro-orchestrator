@@ -56,7 +56,7 @@ def handle(event: dict[str, object], state: Path, snapshot: Callable[[], set[int
     with ledger.connect(state) as connection:
         if name == "PreToolUse":
             assert turn is not None
-            ledger.begin(connection, session, turn, snapshot())
+            ledger.begin(connection, session, turn)
             return {"status": "screen_use_registered"}
         finishing = name in {"Stop", "Interrupt", "SessionEnd", "ManualFinish"}
         finishing = finishing or (name == "PostToolUse" and isinstance(tool, str) and tool.endswith("js_reset"))
@@ -69,9 +69,10 @@ def handle(event: dict[str, object], state: Path, snapshot: Callable[[], set[int
             return {"status": "no_screen_use_in_this_turn"}
         if ledger.remaining(connection):
             return ledger.record(connection, "deferred_other_screen_use", 0, 0)
+        # Once every registered user has released the shared service, older overlays
+        # are leftovers too. Treating their initial IDs as permanently protected
+        # made one missed cleanup survive every subsequent successful finish.
         before = snapshot()
-        if before & ledger.protected(connection):
-            return ledger.record(connection, "deferred_preexisting_cursors", len(before), len(before))
         after = cleanup() if before else before
         if after:
             raise ValueError("Cursor cleanup did not remove all overlays")
@@ -80,12 +81,15 @@ def handle(event: dict[str, object], state: Path, snapshot: Callable[[], set[int
 
 def read_event() -> dict[str, object]:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", choices=("begin", "finish", "status"))
+    parser.add_argument("action", nargs="?", choices=("begin", "finish", "status", "release-ended"))
     parser.add_argument("--session", default=os.environ.get("CODEX_THREAD_ID", ""))
     parser.add_argument("--turn", default="manual")
     args = parser.parse_args()
     if args.action:
-        return {"hook_event_name": {"begin": "PreToolUse", "finish": "ManualFinish", "status": "Status"}[args.action],
+        if args.action == "release-ended" and (not args.session or args.session == os.environ.get("CODEX_THREAD_ID")):
+            raise ValueError("Use release-ended only for an explicitly verified ended session")
+        return {"hook_event_name": {"begin": "PreToolUse", "finish": "ManualFinish", "status": "Status",
+                                   "release-ended": "SessionEnd"}[args.action],
                 "session_id": args.session, "turn_id": args.turn, "tool_name": "mcp__cua_repl__js"}
     data: object = json.loads(sys.stdin.buffer.read(2_000_001))
     if not isinstance(data, dict):
@@ -100,11 +104,13 @@ def main() -> int:
         binary = directory / "inspect-cursors"
         state = Path.home() / ".codex/computer-use/cursor-cleanup/state.sqlite3"
         if event.get("hook_event_name") == "Status":
-            print(json.dumps({"cursor_windows": len(inspect(binary))}))
+            with ledger.connect(state) as connection:
+                leases = ledger.active(connection)
+            print(json.dumps({"cursor_windows": len(inspect(binary)), "active_screen_uses": leases}))
             return 0
         result = handle(event, state, lambda: inspect(binary), lambda: inspect(binary, cleanup=True))
-        warning = result["status"] == "deferred_preexisting_cursors"
-        output = {"systemMessage": "기존 다른 화면 조작의 포인터가 있어 자동 정리를 미뤘도로."} if warning else {}
+        warning = result["status"] == "deferred_other_screen_use"
+        output = {"systemMessage": "다른 작업의 화면 사용권이 남아 포인터 정리를 미뤘도로. status로 확인해야 하도로."} if warning else {}
         print(json.dumps(output, ensure_ascii=False))
         return 0
     except (OSError, ValueError, sqlite3.Error, subprocess.SubprocessError) as error:
