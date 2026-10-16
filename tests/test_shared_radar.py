@@ -18,6 +18,16 @@ from radar_fixture import PAGES, calls, fixture
 
 
 class SharedRadarTests(unittest.TestCase):
+    def test_inflight_changes_coalesce_and_observed_completion_allows_a_later_reversion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, journal(Path(tmp), "owner") as store:
+            first = store.claim(("outbox:note:A",))
+            self.assertIsNotNone(first)
+            self.assertIsNone(store.claim(("outbox:note:A", "page:p:2")))
+            self.assertIsNotNone(store.claim(("page:p:2",)))
+            self.assertIsNone(store.claim(()))
+            self.assertIsNotNone(store.claim(("outbox:note:A",)))
+            self.assertEqual(len(store.status()["events"]), 3)
+
     def test_metadata_connection_cleans_its_own_child_process_group(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

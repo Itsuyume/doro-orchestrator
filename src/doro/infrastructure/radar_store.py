@@ -44,6 +44,11 @@ class RadarJournal:
         with self.connection:
             self.connection.execute("BEGIN IMMEDIATE")
             known = {str(row[0]) for row in self.connection.execute("SELECT token FROM tokens")}
+            active = set(changes)
+            self.connection.executemany("DELETE FROM tokens WHERE token=?", ((token,) for token in known - active))
+            known &= active
+            if known:
+                return None  # The existing Work will re-read the full current change set.
             fresh = tuple(change for change in changes if change not in known)
             if not fresh:
                 return None
