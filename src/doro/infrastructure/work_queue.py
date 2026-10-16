@@ -10,12 +10,13 @@ from doro.infrastructure.storage import session_key
 
 class CodexQueue:
     """The official existing-thread queue; never starts a second Codex worker."""
-    def __init__(self, cwd: Path) -> None:
+    def __init__(self, cwd: Path, binary: Path | None = None) -> None:
         self.cwd = cwd
+        self.binary = binary
 
     def enqueue(self, owner: str, message: str) -> str:
         session_key(owner)
-        binary = shutil.which("codex")
+        binary = str(self.binary) if self.binary is not None else shutil.which("codex")
         if binary is None:
             raise QueueFailure("Codex queue is unavailable; the input remains saved", uncertain=False)
         try:

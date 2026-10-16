@@ -184,6 +184,12 @@ AGY는 검증해 등록한 로컬 `.doro/bin/agy`와 `.doro/agy/verification.jso
 
 의존 방향은 `domain` ← `application` / `infrastructure` ← `interface`다. 도메인의 타입과 정책을 공용 출처로 쓰고 애플리케이션은 프로세스·저장소 포트에만 의존한다. CLI가 실제 저장소·어댑터를 조립한다. 재수출 모듈은 없다.
 
+공용 자료함의 변경 감시기는 `python3 tools/install_shared_radar.py --connection <연결.json> --automation <기존 automation.toml>`로 설치한다. 기존 연결 JSON의 두 Page와 기존 Work 소유자를 사용한다. 로컬 확인은 1분마다, Space 메타데이터 확인은 30분마다 수행하며, 변경이 없으면 Work 메시지를 만들지 않는다. 기존 Work 주기 예약은 중지해 둔다.
+
+Space 확인은 공식 app-server의 임시 연결에서 `read_page(include_content=false)`만 호출한다. 모델 생성 턴은 실행하지 않으며 사용자 대화나 API 키를 새로 만들지 않는다. 실제 새 버전·미전송 파일 해시가 있을 때만 기존 Work에 알린다. 같은 변경은 재실행·재시작 후에도 한 번만 전송하며, 결과가 불확실한 큐 전달은 자동 재시도하지 않는다. Obsidian이 중지돼 있거나 접근·버전 확인에 실패하면 Work를 대체 호출하지 않고 로컬 상태에 오류를 남긴다.
+
+감시기의 전달 장부와 마지막 상태는 로컬 설치 폴더에만 둔다. 원문의 동기화 정본은 기존 플러그인의 `shared-state.json`이며 감시기가 수정하지 않는다. Mac 로그인 세션·Codex 연결 도구·Obsidian이 사용 가능해야 한다. 설치 뒤 `python3 -m doro.interface.shared_radar --config <감시기 설정> --status`로 큐 접수 기록을 확인할 수 있다. 큐 접수와 실제 Work 반영은 별도 상태다.
+
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 python3 tools/check_architecture.py

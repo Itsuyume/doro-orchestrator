@@ -13,7 +13,7 @@ jobs:
       - run: python -m pip install ruff==0.17.0 mypy==2.4.0
       - run: ruff check .
       - run: mypy
-      - run: MYPYPATH=tools/cursor_cleanup mypy --strict tools/cursor_cleanup/lifecycle.py tools/cursor_cleanup/ledger.py tools/install_cursor_cleanup.py
+      - run: MYPYPATH=tools/cursor_cleanup mypy --strict tools/cursor_cleanup/lifecycle.py tools/cursor_cleanup/ledger.py tools/install_cursor_cleanup.py tools/install_shared_radar.py
       - run: python tools/check_architecture.py
       - run: PYTHONPATH=src python -m unittest discover -s tests -v
   native-chat:
