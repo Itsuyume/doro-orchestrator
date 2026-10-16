@@ -45,7 +45,9 @@ class WorkRecoveryCliTests(unittest.TestCase):
                               env=self.env, capture_output=True, text=True, timeout=10)
 
     def flags(self) -> list[str]:
-        status = json.loads(self.run_cli("status", self.session.id).stdout)
+        result = self.run_cli("status", self.session.id)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        status = json.loads(result.stdout)
         def digest(name: str) -> str:
             return hashlib.sha256((self.root / name).read_bytes()).hexdigest()
         return ["recover", self.session.id, "--owner-thread", OWNER,
