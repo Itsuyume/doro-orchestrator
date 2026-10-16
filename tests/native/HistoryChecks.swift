@@ -53,7 +53,7 @@ struct HistoryChecks {
         catch { precondition(error is ChatReadError) }
         let preserved = try Data(contentsOf: store.path)
         precondition(preserved == corrupt)
-        precondition(taskListHeight(content: -1) == 200 && taskListHeight(content: 0) == 200)
+        precondition(taskListHeight(content: -1) == 130 && taskListHeight(content: 0) == 130)
         precondition(taskListHeight(content: 200) == 285 && taskListHeight(content: 10000) == 620)
         print("History checks passed: single/batch removal, restart, undo, new approval, write failure, corruption and size bounds")
     }

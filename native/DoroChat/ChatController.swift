@@ -25,6 +25,7 @@ final class ChatController: ObservableObject {
     }
     @Published var stacks = StackCatalog()
     @Published var showingTasks = false { didSet { if oldValue != showingTasks { onStackLayout?() } } }
+    @Published var openTasksExpanded = true
     @Published var historyExpanded = false { didSet { if oldValue != historyExpanded { onStackLayout?() } } }
     @Published var lastRemoved: Set<String> = []
     @Published var taskContentHeight = 0.0 { didSet { if abs(oldValue - taskContentHeight) > 1 { onStackLayout?() } } }

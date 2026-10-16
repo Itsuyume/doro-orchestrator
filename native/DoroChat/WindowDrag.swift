@@ -29,8 +29,14 @@ struct WindowDragState {
 
 @MainActor
 final class ConversationPanel: NSPanel {
+    var onUserMove: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    func moveFromUser(to origin: NSPoint) {
+        setFrameOrigin(origin)
+        onUserMove?()
+    }
 }
 
 @MainActor
@@ -45,16 +51,16 @@ final class WindowDragView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let window else { return }
+        guard let window = window as? ConversationPanel else { return }
         drag.begin(at: window.convertPoint(toScreen: event.locationInWindow), origin: window.frame.origin)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let window else { return }
+        guard let window = window as? ConversationPanel else { return }
         let point = window.convertPoint(toScreen: event.locationInWindow)
         guard let origin = drag.move(to: point) else { return }
         let area = (NSScreen.screens.first { $0.frame.contains(point) } ?? window.screen)?.visibleFrame
-        if let area { window.setFrameOrigin(clampedPanelOrigin(origin, size: window.frame.size, visible: area)) }
+        if let area { window.moveFromUser(to: clampedPanelOrigin(origin, size: window.frame.size, visible: area)) }
     }
 
     override func mouseUp(with event: NSEvent) {

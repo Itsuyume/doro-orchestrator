@@ -41,5 +41,7 @@ jobs:
       - run: /tmp/doro-background-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/ChatInputEditor.swift tests/native/ComposerChecks.swift -o /tmp/doro-composer-check
       - run: /tmp/doro-composer-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors $(find native/DoroChat -name '*.swift' ! -name 'main.swift') tests/native/TaskListChecks.swift -o /tmp/doro-task-list-check
+      - run: /tmp/doro-task-list-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroOpen/main.swift -o /tmp/doro-open-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors tools/cursor_cleanup/inspector.swift -o /tmp/doro-cursor-inspector

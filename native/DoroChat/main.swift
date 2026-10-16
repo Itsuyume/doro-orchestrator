@@ -34,9 +34,10 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             onOpen: { [weak self] in self?.openTasks() }, onHide: { [weak self] in self?.controller.hidePanel() },
             canQuit: { [weak self] in self?.controller.canQuit ?? false },
             onQuit: { [weak self] in self?.controller.requestStop() })
-        menuBar?.onReady = { [weak self] in
-            guard let self, self.waitingForMenu else { return }
-            self.show(self.controller.display)
+        menuBar?.onAnchorChange = { [weak self] in
+            guard let self, self.controller.display == .panel else { return }
+            if self.waitingForMenu { self.show(.panel) }
+            else { self.placeAtMenuBar(animated: true) }
         }
         let window = ConversationPanel(contentRect: NSRect(x: 0, y: 0, width: 390, height: 590),
                               styleMask: [.borderless, .resizable, .nonactivatingPanel],
@@ -56,6 +57,11 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces]
         window.isReleasedWhenClosed = false
         window.delegate = self
+        window.onUserMove = { [weak self, weak window] in
+            guard let self, let window else { return }
+            do { try self.menuBar?.rememberOffset(window) }
+            catch { self.controller.placementError = error.localizedDescription }
+        }
         if let screen = NSScreen.main {
             let area = screen.visibleFrame
             window.setFrameOrigin(NSPoint(x: area.maxX - 410, y: max(area.minY, area.midY - 295)))
@@ -105,12 +111,12 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let window else { return }
         approvalWindow?.update(anchor: window)
         if display == .hidden || display == .stop { waitingForMenu = false; window.orderOut(nil); return }
-        if display == .panel, !placeAtMenuBar() {
+        if display == .panel, !placeAtMenuBar(resetOffset: true) {
             if waitingForMenu { return }
             waitingForMenu = true
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(750)) { [weak self] in
                 guard let self, self.waitingForMenu, let window = self.window else { return }
-                _ = self.placeAtMenuBar()
+                _ = self.placeAtMenuBar(resetOffset: true)
                 self.waitingForMenu = false
                 window.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
@@ -127,13 +133,13 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         else { controller.hidePanel() }
     }
 
-    @discardableResult private func placeAtMenuBar() -> Bool {
+    @discardableResult private func placeAtMenuBar(size: NSSize? = nil, animated: Bool = false, resetOffset: Bool = false) -> Bool {
         guard let window, let menuBar, controller.display == .panel else { return false }
-        do { try menuBar.place(window); controller.placementError = ""; return true }
+        do { try menuBar.place(window, size: size, animated: animated, resetOffset: resetOffset); controller.placementError = ""; return true }
         catch { controller.placementError = error.localizedDescription; return false }
     }
 
-    @objc private func openTasks() { controller.showTasks(); placeAtMenuBar() }
+    @objc private func openTasks() { controller.showTasks(); placeAtMenuBar(resetOffset: true) }
     @objc private func screenLayoutChanged() { placeAtMenuBar() }
 
     @objc private func returnOrQuit() {
@@ -155,13 +161,17 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let compactHeight = controller.display == .integrated ? 95 : 46
         let compactWidth = controller.display == .integrated ? (count == 0 ? 94 : 258) : 200
         window.minSize = NSSize(width: collapsed ? CGFloat(compactWidth) : 320,
-                                height: collapsed ? CGFloat(compactHeight) : tasks ? 200 : 400)
+                                height: collapsed ? CGFloat(compactHeight) : tasks ? 130 : 400)
         let height = min(collapsed ? CGFloat(compactHeight) : tasks ? CGFloat(controller.taskPanelHeight) : expandedSize.height, visible.height)
         let width = min(collapsed ? CGFloat(compactWidth) : tasks ? 390 : expandedSize.width, visible.width)
+        if controller.display == .panel {
+            placeAtMenuBar(size: NSSize(width: width, height: height), animated: tasks || changedCollapse)
+            return
+        }
         let point = NSPoint(x: previous.maxX - width, y: anchorTop ? previous.maxY - height : previous.minY)
         let origin = clampedPanelOrigin(point, size: NSSize(width: width, height: height), visible: visible)
         let target = NSRect(origin: origin, size: NSSize(width: width, height: height))
-        if target != previous { window.setFrame(target, display: true, animate: changedCollapse && controller.display == .integrated) }
+        InterfaceMotion.frame(target, for: window, animated: tasks || changedCollapse)
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

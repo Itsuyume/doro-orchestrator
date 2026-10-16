@@ -5,22 +5,22 @@ struct ContextSelector: View {
 
     var body: some View {
         Menu {
-            Button("작업 관리…") { controller.showTasks() }
-            if controller.contexts.isEmpty { Text("등록된 작업 없음") }
-            Section("열린 작업") {
+            Button("대화 목록") { controller.showTasks() }
+            if controller.contexts.isEmpty { Text("등록된 대화 없음") }
+            Section("열어 둔 대화") {
                 ForEach(controller.pinnedContexts) { context in
                     Button(title(context)) { controller.openContext(context.id) }
                 }
             }
             if !controller.otherContexts.isEmpty {
-                Menu("닫힌 작업과 지난 대화") {
+                Menu("지난 대화") {
                     ForEach(controller.otherContexts) { context in
                         Button(title(context)) { controller.openContext(context.id) }
                     }
                 }
             }
         } label: {
-            Label("작업 목록", systemImage: "rectangle.stack")
+            Label("대화", systemImage: "rectangle.stack")
         }.menuStyle(.borderlessButton).fixedSize().font(.system(size: 11))
     }
 

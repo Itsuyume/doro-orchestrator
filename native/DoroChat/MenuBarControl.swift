@@ -1,10 +1,5 @@
 import AppKit
 
-func menuPanelOrigin(anchor: NSRect, size: NSSize, visible: NSRect) -> NSPoint {
-    clampedPanelOrigin(NSPoint(x: anchor.midX - size.width / 2, y: anchor.minY - size.height - 6),
-                       size: size, visible: visible)
-}
-
 @MainActor
 final class MenuBarControl: NSObject, NSMenuItemValidation {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -13,7 +8,9 @@ final class MenuBarControl: NSObject, NSMenuItemValidation {
     private let onHide: () -> Void
     private let onQuit: () -> Void
     private let canQuit: () -> Bool
-    var onReady: (() -> Void)?
+    private weak var observedWindow: NSWindow?
+    private var placement = MenuPanelPlacement()
+    var onAnchorChange: (() -> Void)?
 
     init(onToggle: @escaping () -> Void, onOpen: @escaping () -> Void,
          onHide: @escaping () -> Void, canQuit: @escaping () -> Bool, onQuit: @escaping () -> Void) {
@@ -28,19 +25,49 @@ final class MenuBarControl: NSObject, NSMenuItemValidation {
         item.button?.target = self
         item.button?.action = #selector(toggle)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        if let window = item.button?.window {
-            NotificationCenter.default.addObserver(self, selector: #selector(anchorReady),
-                name: NSWindow.didMoveNotification, object: window)
+        if let button = item.button {
+            button.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(anchorChanged),
+                name: NSView.frameDidChangeNotification, object: button)
         }
     }
 
-    func place(_ window: NSWindow) throws {
+    private func anchor() throws -> (NSRect, NSRect, UInt32) {
         guard let button = item.button, let barWindow = button.window, let screen = barWindow.screen else {
             throw ChatReadError.failed("메뉴 막대 위치를 확인하지 못했도로.")
         }
         guard barWindow.frame.height > 0 else { throw ChatReadError.failed("메뉴 아이콘을 배치하는 중이도로.") }
-        let anchor = barWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        window.setFrameOrigin(menuPanelOrigin(anchor: anchor, size: window.frame.size, visible: screen.visibleFrame))
+        guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            throw ChatReadError.failed("메뉴 막대가 있는 화면을 확인하지 못했도로.")
+        }
+        observeWindow(barWindow)
+        return (barWindow.convertToScreen(button.convert(button.bounds, to: nil)), screen.visibleFrame, number.uint32Value)
+    }
+
+    private func observeWindow(_ window: NSWindow) {
+        guard observedWindow !== window else { return }
+        let center = NotificationCenter.default
+        if let old = observedWindow {
+            center.removeObserver(self, name: NSWindow.didMoveNotification, object: old)
+            center.removeObserver(self, name: NSWindow.didResizeNotification, object: old)
+            center.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: old)
+        }
+        observedWindow = window
+        center.addObserver(self, selector: #selector(anchorChanged), name: NSWindow.didMoveNotification, object: window)
+        center.addObserver(self, selector: #selector(anchorChanged), name: NSWindow.didResizeNotification, object: window)
+        center.addObserver(self, selector: #selector(anchorChanged), name: NSWindow.didChangeScreenNotification, object: window)
+    }
+
+    func place(_ window: NSWindow, size: NSSize? = nil, animated: Bool = false, resetOffset: Bool = false) throws {
+        let (anchor, visible, display) = try anchor()
+        let target = placement.frame(anchor: anchor, size: size ?? window.frame.size, visible: visible,
+                                     display: display, reset: resetOffset)
+        InterfaceMotion.frame(target, for: window, animated: animated)
+    }
+
+    func rememberOffset(_ window: NSWindow) throws {
+        let (anchor, _, display) = try anchor()
+        placement.remember(origin: window.frame.origin, anchor: anchor, size: window.frame.size, display: display)
     }
 
     func stop() { NotificationCenter.default.removeObserver(self); NSStatusBar.system.removeStatusItem(item) }
@@ -52,7 +79,7 @@ final class MenuBarControl: NSObject, NSMenuItemValidation {
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool { menuItem.action != #selector(quit) || canQuit() }
 
-    @objc private func anchorReady() { onReady?() }
+    @objc private func anchorChanged() { onAnchorChange?() }
 
     @objc private func toggle() {
         guard let event = NSApp.currentEvent,
@@ -60,7 +87,7 @@ final class MenuBarControl: NSObject, NSMenuItemValidation {
             onToggle(); return
         }
         let menu = NSMenu()
-        for (title, action) in [("작업 목록", #selector(open)), ("창 숨기기", #selector(hide)), ("종료", #selector(quit))] {
+        for (title, action) in [("대화", #selector(open)), ("창 숨기기", #selector(hide)), ("종료", #selector(quit))] {
             let entry = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
             entry.target = self
         }

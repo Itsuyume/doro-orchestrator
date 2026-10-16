@@ -21,7 +21,7 @@ struct StackTray: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "rectangle.stack")
-            Text("작업 목록")
+            Text("대화")
             Spacer(minLength: 6)
             if controller.approvalCount > 0 {
                 Text("\(controller.approvalCount)").foregroundStyle(Color.orange)
@@ -37,52 +37,88 @@ struct StackTray: View {
 
 struct TaskManager: View {
     @ObservedObject var controller: ChatController
+    @Environment(\.accessibilityReduceMotion) private var reducedMotion
     @State private var selecting = false
     @State private var selected: Set<String> = []
+    @State private var activeSwipe: String?
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("열린 작업").font(.system(size: 13, weight: .semibold))
-                if controller.pinnedContexts.isEmpty {
-                    Text("열어 둔 대화가 없도로.").font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                ForEach(controller.pinnedContexts) { row($0, pinned: true) }
-                if !controller.otherContexts.isEmpty { history }
-                if !controller.lastRemoved.isEmpty {
-                    Button("되돌리기 · \(controller.lastRemoved.count)개") { controller.undoHistoryRemoval() }
-                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                .onGeometryChange(for: Double.self) { Double($0.size.height) } action: { height in
-                    if abs(height - controller.taskContentHeight) > 1 { controller.taskContentHeight = height }
-                }
-        }.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .onChange(of: controller.otherContexts.map(\.id)) { _, ids in selected.formIntersection(ids) }
+    private var contentHeight: Double {
+        TaskListLayout.contentHeight(open: controller.pinnedContexts.count, expanded: controller.openTasksExpanded,
+            history: controller.otherContexts.count, historyExpanded: controller.historyExpanded,
+            selecting: selecting, undo: !controller.lastRemoved.isEmpty)
     }
 
-    private var history: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Button { controller.historyExpanded.toggle() } label: {
-                    Label("닫힌 작업과 지난 대화 · \(controller.otherContexts.count)",
-                          systemImage: controller.historyExpanded ? "chevron.down" : "chevron.right")
-                }.buttonStyle(.plain)
-                Spacer(minLength: 0)
-                Menu {
-                    Button(selecting ? "선택 끝내기" : "선택해서 지우기") {
-                        selecting.toggle(); selected = []; controller.historyExpanded = true
-                    }
-                    Button("모두 지우기", role: .destructive) { controller.removeHistory(controller.removableHistoryIDs) }
-                        .disabled(controller.removableHistoryIDs.isEmpty)
-                } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize()
-                    .accessibilityLabel("지난 작업 관리")
-            }.font(.system(size: 12))
-            if controller.historyExpanded {
-                if selecting { selectionBar }
-                ForEach(controller.otherContexts) { row($0, pinned: false) }
+    var body: some View {
+        List {
+            openHeader
+            if controller.openTasksExpanded {
+                if controller.pinnedContexts.isEmpty {
+                    Text("열어 둔 대화가 없도로.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        .frame(height: TaskListLayout.rowHeight).listRowSeparator(.hidden)
+                }
+                ForEach(controller.pinnedContexts) { row($0, pinned: true) }
             }
-        }
+            if !controller.otherContexts.isEmpty {
+                historyHeader
+                if controller.historyExpanded {
+                    if selecting { selectionBar }
+                    ForEach(controller.otherContexts) { row($0, pinned: false) }
+                }
+            }
+            if !controller.lastRemoved.isEmpty {
+                Button { animate { controller.undoHistoryRemoval() } } label: {
+                    Label("삭제 취소", systemImage: "arrow.uturn.backward")
+                }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
+                    .help("최근 지운 대화 \(controller.lastRemoved.count)개를 목록에 복원")
+                    .frame(height: TaskListLayout.controlHeight).listRowSeparator(.hidden)
+            }
+        }.listStyle(.plain).scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 0)
+            .contentMargins(.vertical, TaskListLayout.verticalInset, for: .scrollContent)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .onAppear { controller.taskContentHeight = contentHeight }
+            .onChange(of: contentHeight) { _, value in controller.taskContentHeight = value }
+            .onChange(of: controller.otherContexts.map(\.id)) { _, ids in selected.formIntersection(ids) }
+            .onExitCommand {
+                if activeSwipe != nil { activeSwipe = nil }
+                else if selecting { selecting = false; selected = [] }
+            }
+    }
+
+    private var openHeader: some View {
+        Button { animate { activeSwipe = nil; controller.openTasksExpanded.toggle() } } label: {
+            HStack {
+                Text("열어 둔 대화").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Image(systemName: "chevron.up")
+                    .rotationEffect(.degrees(controller.openTasksExpanded ? 0 : 180))
+                    .frame(width: 28, height: 24).contentShape(Rectangle())
+            }.contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .accessibilityLabel(controller.openTasksExpanded ? "열어 둔 대화 접기" : "열어 둔 대화 펼치기")
+            .help(controller.openTasksExpanded ? "대화 접기" : "대화 펼치기")
+            .frame(height: TaskListLayout.controlHeight)
+            .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 10)).listRowSeparator(.hidden)
+    }
+
+    private var historyHeader: some View {
+        HStack {
+            Button { animate { activeSwipe = nil; controller.historyExpanded.toggle() } } label: {
+                Label("지난 대화 · \(controller.otherContexts.count)",
+                      systemImage: controller.historyExpanded ? "chevron.down" : "chevron.right")
+                    .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            Menu {
+                Button(selecting ? "선택 완료" : "선택") {
+                    animate { activeSwipe = nil; selecting.toggle(); selected = []; controller.historyExpanded = true }
+                }
+                Button("모두 지우기", role: .destructive) { animate { controller.removeHistory(controller.removableHistoryIDs) } }
+                    .disabled(controller.removableHistoryIDs.isEmpty)
+            } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .accessibilityLabel("지난 대화 관리")
+        }.font(.system(size: 12)).frame(height: TaskListLayout.controlHeight)
+            .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 10)).listRowSeparator(.hidden)
     }
 
     private var selectionBar: some View {
@@ -91,35 +127,24 @@ struct TaskManager: View {
                 selected = selected == controller.removableHistoryIDs ? [] : controller.removableHistoryIDs
             }
             Spacer()
-            Button("지우기 \(selected.count)", role: .destructive) { controller.removeHistory(selected); selected = [] }
+            Button("지우기 \(selected.count)", role: .destructive) { animate { controller.removeHistory(selected); selected = [] } }
                 .disabled(selected.isEmpty)
             Button("취소") { selecting = false; selected = [] }
-        }.font(.system(size: 11)).buttonStyle(.plain)
+        }.font(.system(size: 11)).buttonStyle(.plain).frame(height: TaskListLayout.controlHeight)
+            .listRowSeparator(.hidden)
     }
 
     private func row(_ context: ChatContext, pinned: Bool) -> some View {
-        HStack(spacing: 8) {
-            if selecting && !pinned {
-                Toggle("", isOn: Binding(get: { selected.contains(context.id) }, set: { value in
-                    if value { selected.insert(context.id) } else { selected.remove(context.id) }
-                })).toggleStyle(.checkbox).labelsHidden().accessibilityLabel(context.label + " 선택")
-                    .disabled(!controller.removableHistoryIDs.contains(context.id))
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(context.label).font(.system(size: 12, weight: .medium)).lineLimit(2)
-                Text(context.needs_input ? "승인 필요" : context.status)
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            if pinned || !selecting { Button(pinned ? "열기" : "다시 열기") { controller.openContext(context.id) } }
-            if pinned {
-                Button { controller.closeStack(context.id) } label: { Image(systemName: "xmark") }
-                    .help("대화 목록에서 닫기 · 작업은 계속")
-            } else if !selecting {
-                Button(role: .destructive) { controller.removeHistory([context.id]) } label: { Image(systemName: "trash") }
-                    .buttonStyle(.plain).accessibilityLabel(context.label + " 목록에서 지우기")
-                    .help(context.finished ? "목록에서 지우기 · GPT 대화는 유지" : "진행 중인 작업은 유지")
-                    .disabled(!controller.removableHistoryIDs.contains(context.id))
-            }
-        }.font(.system(size: 11))
+        TaskRow(context: context, pinned: pinned, selecting: selecting && !pinned,
+            selected: selected.contains(context.id), removable: controller.removableHistoryIDs.contains(context.id),
+            onOpen: { controller.openContext(context.id) },
+            onClose: {
+                animate { if pinned { controller.closeStack(context.id) } else { controller.removeHistory([context.id]) } }
+                return pinned ? !controller.stacks.contains(context.id) : !controller.stacks.isListed(context.id)
+            },
+            onSelect: { if selected.contains(context.id) { selected.remove(context.id) } else { selected.insert(context.id) } },
+            activeSwipe: $activeSwipe)
     }
+
+    private func animate(_ change: () -> Void) { withAnimation(InterfaceMotion.animation(reduced: reducedMotion), change) }
 }

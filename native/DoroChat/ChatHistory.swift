@@ -32,5 +32,5 @@ extension ChatController {
 }
 
 func taskListHeight(content: Double) -> Double {
-    min(620, max(200, content + 85))
+    min(620, max(130, content + 85))
 }

@@ -44,6 +44,7 @@ extension ChatController {
 
     func closeStack(_ id: String) {
         stacks.close(id)
+        if showingTasks { onStackLayout?(); return }
         if id == selectedSession { collapsed = true }
         else { onStackLayout?() }
         if display == .panel && (id == selectedSession || pinnedContexts.isEmpty) { hidePanel() }

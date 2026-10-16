@@ -7,10 +7,10 @@ func clampedPanelOrigin(_ origin: NSPoint, size: NSSize, visible: NSRect) -> NSP
 
 @MainActor
 final class PanelDragGesture: NSObject, NSGestureRecognizerDelegate {
-    private weak var window: NSWindow?
+    private weak var window: ConversationPanel?
     private var drag = WindowDragState()
 
-    init(window: NSWindow, view: NSView) {
+    init(window: ConversationPanel, view: NSView) {
         self.window = window
         super.init()
         let pan = NSPanGestureRecognizer(target: self, action: #selector(movePanel))
@@ -25,7 +25,7 @@ final class PanelDragGesture: NSObject, NSGestureRecognizerDelegate {
         let location = content.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow
         var target = content.hitTest(location)
         while let view = target {
-            if view is WindowDragView || view is NSScroller { return false }
+            if view is WindowDragView || view is NSScroller || view is NSTableView || view is NSCollectionView { return false }
             if let editor = view as? NSTextView, editor.isEditable { return false }
             target = view.superview
         }
@@ -41,7 +41,7 @@ final class PanelDragGesture: NSObject, NSGestureRecognizerDelegate {
         if gesture.state == .began || gesture.state == .changed,
            let origin = drag.move(to: point),
            let area = (NSScreen.screens.first { $0.frame.contains(point) } ?? window.screen)?.visibleFrame {
-            window.setFrameOrigin(clampedPanelOrigin(origin, size: window.frame.size, visible: area))
+            window.moveFromUser(to: clampedPanelOrigin(origin, size: window.frame.size, visible: area))
         }
         if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed { _ = drag.finish() }
     }

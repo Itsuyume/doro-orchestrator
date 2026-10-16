@@ -80,7 +80,7 @@ struct ChatView: View {
         .padding(6)
         .overlay {
             if controller.collapsed, controller.display == .panel {
-                WindowDragHandle(label: "작업 목록", onTap: { controller.toggleChat() })
+                WindowDragHandle(label: "대화 목록", onTap: { controller.toggleChat() })
             }
         }
         .preferredColorScheme(.light)
@@ -115,8 +115,8 @@ struct ChatView: View {
                 if !controller.showingTasks {
                     Button { controller.showTasks() } label: {
                         Image(systemName: "chevron.left").frame(width: 26, height: 22).contentShape(Rectangle())
-                    }.buttonStyle(.plain).help("작업 목록")
-                        .accessibilityLabel("작업 목록으로 돌아가기")
+                    }.buttonStyle(.plain).help("대화 목록")
+                        .accessibilityLabel("대화 목록으로 돌아가기")
                 }
                 ContextSelector(controller: controller)
                 WindowDragHandle().frame(maxWidth: .infinity).frame(height: 20)
