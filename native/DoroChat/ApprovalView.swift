@@ -72,15 +72,28 @@ struct ApprovalView: View {
 }
 
 struct ApprovalEntry: View {
+    enum Style { case title, count, icon }
     @ObservedObject var controller: ChatController
+    var style = Style.title
     var body: some View {
         Menu {
             ForEach(controller.contexts.filter(\.needs_input)) { context in
                 Button(context.label) { controller.openApproval(context.id) }
             }
         } label: {
-            Label("승인 \(controller.approvalCount)", systemImage: "bubble.left.and.exclamationmark.bubble.right")
-        }.menuStyle(.borderlessButton).fixedSize().foregroundStyle(.primary)
+            switch style {
+            case .count:
+                HStack(spacing: 2) {
+                    Image(systemName: "exclamationmark.bubble")
+                    Text(controller.approvalCount > 99 ? "99+" : "\(controller.approvalCount)").monospacedDigit()
+                }.frame(height: 24)
+            case .icon:
+                Image(systemName: "exclamationmark.bubble").frame(width: 24, height: 24)
+            case .title:
+                Label("승인 \(controller.approvalCount)", systemImage: "bubble.left.and.exclamationmark.bubble.right")
+            }
+        }.menuStyle(.borderlessButton).menuIndicator(style == .title ? .visible : .hidden)
+            .fixedSize().foregroundStyle(.primary).help("승인 대기 \(controller.approvalCount)개")
             .accessibilityLabel("대기 중인 승인 \(controller.approvalCount)개 열기")
     }
 }

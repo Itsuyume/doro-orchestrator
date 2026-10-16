@@ -76,8 +76,17 @@ struct ModelSettingsButton: View {
     @ObservedObject var controller: ChatController
     @State private var showing = false
     var body: some View {
-        Button { showing.toggle() } label: { Image(systemName: "slider.horizontal.3") }
-            .buttonStyle(.plain).help("모델 설정").accessibilityLabel("모델과 생각 깊이 선택")
+        Button { showing.toggle() } label: {
+            HStack(spacing: 6) {
+                ProviderLight(name: "Claude", enabled: controller.conversation?.claude_enabled)
+                ProviderLight(name: "AGY", enabled: controller.conversation.map { view in
+                    view.agy_enabled && view.model_selection?.alternatives?.first(where: { $0.provider == "agy" })?.available == true
+                })
+            }.padding(.horizontal, 5).frame(height: 24)
+                .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+                .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(.primary.opacity(0.10), lineWidth: 0.5) }
+        }.buttonStyle(.plain).fixedSize().help("Claude·AGY 모델 설정")
+            .accessibilityLabel("Claude·AGY 모델과 생각 깊이 선택")
             .popover(isPresented: $showing) {
                 if let selection = controller.conversation?.model_selection {
                     ModelPicker(controller: controller, selection: selection, session: controller.selectedSession)

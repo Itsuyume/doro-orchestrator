@@ -11,6 +11,9 @@ struct ComposerChecks {
     @MainActor static func main() {
         _ = NSApplication.shared
         let editor = ComposerTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 60))
+        let window = NSWindow(contentRect: editor.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = editor
+        precondition(window.makeFirstResponder(editor))
         editor.isRichText = false
         editor.string = "첫 줄 🇰🇷"
         editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
@@ -25,6 +28,7 @@ struct ComposerChecks {
         editor.keyDown(with: event())
         precondition(submissions == 1, "A held Enter or disabled editor cannot send")
         editor.isEditable = true
+        precondition(window.firstResponder === editor, "Temporarily disabling input must preserve the keyboard responder")
         for flags: NSEvent.ModifierFlags in [.shift, .option, .control, .command] {
             precondition(!ComposerTextView.sends(event(flags), composing: false))
         }

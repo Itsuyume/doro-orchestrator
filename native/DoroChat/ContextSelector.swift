@@ -4,6 +4,16 @@ struct ContextSelector: View {
     @ObservedObject var controller: ChatController
 
     var body: some View {
+        HStack(spacing: 0) {
+            Button { controller.showTasks() } label: {
+                Label("대화", systemImage: "rectangle.stack").frame(height: 24)
+            }.buttonStyle(.plain).help("대화 목록")
+                .accessibilityLabel("대화 목록으로 돌아가기")
+            conversationMenu
+        }.fixedSize().font(.system(size: 11))
+    }
+
+    private var conversationMenu: some View {
         Menu {
             Button("대화 목록") { controller.showTasks() }
             if controller.contexts.isEmpty { Text("등록된 대화 없음") }
@@ -20,8 +30,10 @@ struct ContextSelector: View {
                 }
             }
         } label: {
-            Label("대화", systemImage: "rectangle.stack")
-        }.menuStyle(.borderlessButton).fixedSize().font(.system(size: 11))
+            Image(systemName: "chevron.down").font(.system(size: 8))
+                .frame(width: 16, height: 24).contentShape(Rectangle())
+        }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help("열어 둔 대화 선택").accessibilityLabel("열어 둔 대화 선택")
     }
 
     private func title(_ context: ChatContext) -> String {

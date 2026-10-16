@@ -6,7 +6,12 @@ final class ChatController: ObservableObject {
     @Published var conversation: Conversation?
     @Published var contexts: [ChatContext] = []
     @Published var selectedSession: String
-    @Published var display = ViewerDisplay.hidden
+    @Published var display = ViewerDisplay.hidden {
+        didSet {
+            if display == .panel && oldValue != .panel { panelShownAt = ProcessInfo.processInfo.systemUptime }
+        }
+    }
+    private(set) var panelShownAt = 0.0
     @Published var readError = ""
     @Published var shortcutError = ""
     @Published var placementError = ""

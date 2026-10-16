@@ -1,6 +1,7 @@
 import AppKit
 
 enum TaskListLayout {
+    static let headerHeight = 32.0
     static let maxVisibleRows = 3
     static let rowHeight = 56.0
     static let controlHeight = 28.0

@@ -52,6 +52,16 @@ extension ChatController {
         onDisplay?(.hidden)
     }
 
+    func toggleMenuPanel() {
+        if display == .hidden { showTasks() }
+        else { hidePanel() }
+    }
+
+    func handleOutsideInteraction(overMenuIcon: Bool, timestamp: TimeInterval) {
+        guard display == .panel, !overMenuIcon, timestamp >= panelShownAt else { return }
+        minimizeCurrent()
+    }
+
     func requestStop() {
         guard canQuit else { readError = "메시지 전달을 확인한 뒤 종료해줘도로."; return }
         guard prepareToStop() else { return }

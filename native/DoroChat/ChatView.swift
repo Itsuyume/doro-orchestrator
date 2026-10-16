@@ -58,7 +58,7 @@ struct ChatView: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 5) {
             if !controller.collapsed {
-                header
+                ChatToolbar(controller: controller)
                 expandedBody
             }
             if controller.collapsed, controller.display == .panel {
@@ -106,46 +106,6 @@ struct ChatView: View {
                 Spacer(); ProgressView("대화를 읽는 중이도로…"); Spacer()
             }
         }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                if !controller.showingTasks || controller.showingNewTask {
-                    Button { controller.showTasks() } label: {
-                        Image(systemName: "chevron.left").frame(width: 26, height: 22).contentShape(Rectangle())
-                    }.buttonStyle(.plain).help("대화 목록")
-                        .accessibilityLabel("대화 목록으로 돌아가기")
-                }
-                if controller.showingNewTask { Text("새 작업").font(.system(size: 13, weight: .semibold)) }
-                else { ContextSelector(controller: controller) }
-                WindowDragHandle().frame(maxWidth: .infinity).frame(height: 20)
-                Button { controller.beginNewTask() } label: {
-                    Image(systemName: "plus").frame(width: 28, height: 24).contentShape(Rectangle())
-                }.buttonStyle(.plain).help("새 작업").accessibilityLabel("새 GPT 작업 시작")
-                    .disabled(controller.showingNewTask)
-                Button { controller.collapseToDock() } label: {
-                    Image(systemName: "chevron.up").frame(width: 28, height: 24).contentShape(Rectangle())
-                }.buttonStyle(.plain).help("대화 접기").accessibilityLabel("대화 접기 · dock만 남기기")
-            }
-            HStack {
-                ProviderLight(name: "Claude", enabled: controller.conversation?.claude_enabled)
-                ProviderLight(name: "AGY", enabled: controller.conversation.map { view in
-                    view.agy_enabled && view.model_selection?.alternatives?.first(where: { $0.provider == "agy" })?.available == true
-                })
-                ModelSettingsButton(controller: controller)
-                Spacer()
-                if controller.approvalCount > 0 {
-                    ApprovalEntry(controller: controller)
-                }
-                Button { controller.requestStop() } label: {
-                    Image(systemName: "xmark").frame(width: 26, height: 20).contentShape(Rectangle())
-                }.buttonStyle(.plain).background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
-                    .accessibilityLabel("도로협업 종료 · 작업 기록은 유지")
-                    .help(controller.canQuit ? "종료 · 메뉴 아이콘도 닫기" : "메시지 전달 확인 중")
-                    .disabled(!controller.canQuit)
-            }.font(.system(size: 11))
-        }.padding(9).background(ChatSurface.chrome, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func transcript(_ view: Conversation) -> some View {

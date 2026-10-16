@@ -67,6 +67,60 @@ struct InteractionChecks {
         controller.sendingSessions.remove("B")
         controller.requestStop()
         precondition(quitRequests == 1 && controller.contexts[0].needs_input, "Quit closes the UI while retaining work and questions")
-        print("Interaction checks passed: click/drag threshold, drag reversal, minimize, hide, restore, draft preservation")
+        try checkMenuEventOrdering()
+        print("Interaction checks passed: click/drag threshold, drag reversal, minimize/hide/restore, draft preservation, menu/outside event ordering")
+    }
+
+    @MainActor static func checkMenuEventOrdering() throws {
+        _ = NSApplication.shared
+        let controller = ChatController(command: ["/usr/bin/false", "chat", "A", "--json"])
+        controller.display = .panel
+        controller.inputText = "Keep this draft"
+        controller.scrollTarget = "Earlier message"
+        var displays: [ViewerDisplay] = []
+        controller.onDisplay = { displays.append($0) }
+        var overMenuIcon = true
+        var mouseClick = true
+        let outside = try OutsideCollapse(controller: controller, isMenuInteraction: { _ in overMenuIcon }, isMouseClick: { mouseClick })
+        defer { outside.stop() }
+        func deactivate() { NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp) }
+        deactivate()
+        precondition(controller.display == .panel && displays.isEmpty,
+                     "A menu mouse-down cannot hide the panel before its own mouse-up toggles it")
+        controller.toggleMenuPanel()
+        deactivate()
+        precondition(controller.display == .hidden && displays == [.hidden],
+                     "A second menu click must hide once and stay hidden despite a delayed outside callback")
+        deactivate()
+        controller.toggleMenuPanel()
+        deactivate()
+        precondition(controller.display == .panel && displays == [.hidden, .panel],
+                     "One menu click must reopen once regardless of deactivation callback ordering")
+        controller.handleOutsideInteraction(overMenuIcon: false, timestamp: controller.panelShownAt - 1)
+        precondition(controller.display == .panel, "A delayed click from before this reveal cannot hide the newly opened panel")
+        mouseClick = false
+        deactivate()
+        precondition(controller.display == .hidden, "Keyboard app switching must still hide the panel with the pointer over its icon")
+        controller.showTasks()
+        mouseClick = true
+        overMenuIcon = false
+        deactivate()
+        precondition(controller.display == .hidden && controller.collapsed,
+                     "Clicks outside the menu must still hide both expanded and docked panels")
+        controller.showTasks()
+        controller.collapseToDock()
+        deactivate()
+        precondition(controller.display == .hidden)
+        controller.display = .integrated
+        controller.collapsed = false
+        deactivate()
+        precondition(controller.display == .integrated && !controller.collapsed,
+                     "Panel outside handling cannot change the integrated pet mode")
+        precondition(controller.inputText == "Keep this draft" && controller.scrollTarget == "Earlier message",
+                     "Menu and outside events cannot clear drafts or the reading position")
+        outside.stop()
+        controller.display = .panel
+        deactivate()
+        precondition(controller.display == .panel, "Stopping outside monitoring must remove its notification side effects")
     }
 }

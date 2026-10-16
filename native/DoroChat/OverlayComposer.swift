@@ -8,20 +8,12 @@ struct OverlayComposer: View {
                 .frame(height: 34)
                 .padding(5).background(ChatSurface.editor, in: RoundedRectangle(cornerRadius: 8))
                 .accessibilityLabel("도로에게 보낼 내 메시지")
-            HStack {
-                Text(controller.currentLabel).lineLimit(1).foregroundStyle(.secondary)
-                Spacer()
-                Button("보내기") { controller.submitInput() }
-                    .buttonStyle(.bordered)
-                    .disabled(!controller.canSendInput).keyboardShortcut(.return, modifiers: .command)
-                    .help("Enter로 보내기 · Shift+Enter는 줄바꿈")
-            }.font(.system(size: 11))
+                .accessibilityActions {
+                    if controller.canSendInput { Button("보내기") { controller.submitInput() } }
+                }
+                .help("Enter로 보내기 · Shift+Enter는 줄바꿈")
             if let problem = controller.inputProblem(controller.inputText) {
                 Text(problem).font(.system(size: 11)).foregroundStyle(.red)
-            }
-            if !controller.inputStatus.isEmpty {
-                Text(controller.inputStatus).font(.system(size: 10)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }
         }
         .disabled(controller.sending || controller.conversation?.input_enabled != true)

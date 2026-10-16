@@ -33,7 +33,7 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenu()
-        menuBar = MenuBarControl(onToggle: { [weak self] in self?.togglePanel() },
+        menuBar = MenuBarControl(onToggle: { [weak self] in self?.controller.toggleMenuPanel() },
             onOpen: { [weak self] in self?.openTasks() }, onHide: { [weak self] in self?.controller.hidePanel() },
             canQuit: { [weak self] in self?.controller.canQuit ?? false },
             onQuit: { [weak self] in self?.controller.requestStop() })
@@ -70,7 +70,11 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.setFrameOrigin(NSPoint(x: area.maxX - 410, y: max(area.minY, area.midY - 295)))
         }
         self.window = window
-        do { outsideCollapse = try OutsideCollapse(controller: controller) } catch { controller.interactionError = error.localizedDescription }
+        do {
+            outsideCollapse = try OutsideCollapse(controller: controller,
+                isMenuInteraction: { [weak self] point in self?.menuBar?.contains(screenPoint: point) == true },
+                isMouseClick: { NSEvent.pressedMouseButtons & 3 != 0 })
+        } catch { controller.interactionError = error.localizedDescription }
         approvalWindow = ApprovalWindow(controller: controller)
         controller.onApprovalChange = { [weak self] in
             guard let self else { return }
@@ -138,11 +142,6 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-    private func togglePanel() {
-        if controller.display == .hidden { openTasks() }
-        else { controller.hidePanel() }
-    }
-
     @discardableResult private func placeAtMenuBar(size: NSSize? = nil, animated: Bool = false, resetOffset: Bool = false) -> Bool {
         guard let window, let menuBar, controller.display == .panel else { return false }
         do { try menuBar.place(window, size: size, animated: animated, resetOffset: resetOffset); controller.placementError = ""; return true }

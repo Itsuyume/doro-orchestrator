@@ -32,8 +32,16 @@ final class MenuBarControl: NSObject, NSMenuItemValidation {
         }
     }
 
+    private var buttonFrame: NSRect? {
+        guard let button = item.button, let window = button.window else { return nil }
+        return window.convertToScreen(button.convert(button.bounds, to: nil))
+    }
+
+    func contains(screenPoint: NSPoint) -> Bool { buttonFrame?.contains(screenPoint) == true }
+
     private func anchor() throws -> (NSRect, NSRect, UInt32) {
-        guard let button = item.button, let barWindow = button.window, let screen = barWindow.screen else {
+        guard let button = item.button, let barWindow = button.window, let screen = barWindow.screen,
+              let frame = buttonFrame else {
             throw ChatReadError.failed("메뉴 막대 위치를 확인하지 못했도로.")
         }
         guard barWindow.frame.height > 0 else { throw ChatReadError.failed("메뉴 아이콘을 배치하는 중이도로.") }
@@ -41,7 +49,7 @@ final class MenuBarControl: NSObject, NSMenuItemValidation {
             throw ChatReadError.failed("메뉴 막대가 있는 화면을 확인하지 못했도로.")
         }
         observeWindow(barWindow)
-        return (barWindow.convertToScreen(button.convert(button.bounds, to: nil)), screen.visibleFrame, number.uint32Value)
+        return (frame, screen.visibleFrame, number.uint32Value)
     }
 
     private func observeWindow(_ window: NSWindow) {

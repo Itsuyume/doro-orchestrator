@@ -54,8 +54,8 @@ struct HistoryChecks {
         let preserved = try Data(contentsOf: store.path)
         precondition(preserved == corrupt)
         precondition(taskListHeight(content: -1) == 130 && taskListHeight(content: 0) == 130)
-        precondition(taskListHeight(content: 200) == 287 && taskListHeight(content: 10000) == 620,
-                     "The fixed task region includes 87pt of header, root insets and spacing")
+        precondition(taskListHeight(content: 200) == 249 && taskListHeight(content: 10000) == 620,
+                     "The fixed task region includes the 32pt toolbar, root insets and spacing")
         print("History checks passed: single/batch removal, restart, undo, new approval, write failure, corruption and size bounds")
     }
 }

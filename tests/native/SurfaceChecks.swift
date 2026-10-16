@@ -31,6 +31,7 @@ struct SurfaceChecks {
 
     @MainActor static func main() {
         _ = NSApplication.shared
+        checkStatusMotion()
         guard let light = NSAppearance(named: .aqua), let dark = NSAppearance(named: .darkAqua) else {
             preconditionFailure("Both macOS appearances are required")
         }
@@ -59,6 +60,21 @@ struct SurfaceChecks {
         precondition(host.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
         precondition(controller.inputText == "Preserve this draft" && controller.scrollTarget == "earlier",
                      "An appearance change must not recreate conversation state")
-        print("Surface checks passed: light/dark adaptation, text/caret/action contrast, draft and reading position")
+        print("Surface checks passed: light/dark adaptation, text/caret/action contrast, draft/reading position, status movement and reduced motion")
+    }
+
+    static func checkStatusMotion() {
+        for (time, expected) in [(0.0, 0.0), (1.6, 0.0), (2.6, -26.0), (3.6, -52.0), (4.6, -52.0), (6.2, -26.0), (7.2, 0.0)] {
+            let offset = InterfaceMotion.statusOffset(elapsed: time, contentWidth: 152, viewportWidth: 100, reduced: false)
+            precondition(abs(offset - expected) < 0.001, "Long status text must pause at both readable ends and return without jumping")
+        }
+        for (content, viewport) in [(0.0, 100.0), (100.0, 100.0), (50.0, 100.0), (100.0, 0.0), (100.5, 100.0), (102.0, 100.0)] {
+            precondition(InterfaceMotion.statusOffset(elapsed: 3, contentWidth: content, viewportWidth: viewport, reduced: false) == 0)
+        }
+        precondition(InterfaceMotion.statusOffset(elapsed: -1, contentWidth: 200, viewportWidth: 100, reduced: false) == 0)
+        precondition(InterfaceMotion.statusOffset(elapsed: 2, contentWidth: 102.5, viewportWidth: 100, reduced: false) < 0,
+                     "Status motion starts only beyond the subpixel tolerance")
+        precondition(InterfaceMotion.statusOffset(elapsed: 3, contentWidth: 200, viewportWidth: 100, reduced: true) == 0,
+                     "Reduce Motion must stop the status text")
     }
 }
