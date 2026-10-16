@@ -34,5 +34,6 @@ extension ChatController {
 }
 
 func taskListHeight(content: Double) -> Double {
+    // Header 70pt + root insets 12pt + body spacing 5pt.
     min(620, max(130, content + 87))
 }

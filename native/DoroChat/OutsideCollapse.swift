@@ -18,8 +18,8 @@ final class OutsideCollapse: NSObject {
     }
 
     @objc private func applicationDeactivated() {
-        guard mouseMonitor != nil, let controller, controller.display == .panel, !controller.collapsed else { return }
-        controller.collapseToDock()
+        guard mouseMonitor != nil, let controller, controller.display == .panel else { return }
+        controller.minimizeCurrent()
     }
 
     func stop() {

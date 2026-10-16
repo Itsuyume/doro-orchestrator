@@ -145,13 +145,19 @@ struct TaskListChecks {
         controller.scrollTarget = "earlier"
         var collapses = 0
         controller.onCollapse = { _ in collapses += 1 }
+        var hides = 0
+        controller.onDisplay = { if $0 == .hidden { hides += 1 } }
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: NSApp)
         precondition(!controller.collapsed, "A settings/approval window becoming key must not fold the conversation")
         NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
-        precondition(controller.collapsed && controller.display == .panel && controller.inputText == "Preserve draft"
-                     && controller.scrollTarget == "earlier", "Another app folds to the dock without ending work or losing input")
+        precondition(controller.collapsed && controller.display == .hidden && controller.inputText == "Preserve draft"
+                     && controller.scrollTarget == "earlier", "Another app hides to the menu bar without ending work or losing input")
         NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
-        precondition(collapses == 1, "Repeated outside events cannot trigger repeated resize animations")
+        precondition(collapses == 1 && hides == 1, "Repeated outside events cannot trigger repeated hide or resize actions")
+        controller.display = .panel
+        NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
+        precondition(controller.display == .hidden && controller.collapsed && hides == 2,
+                     "An already-collapsed dock also hides completely on an outside click")
         controller.display = .hidden
         controller.collapsed = false
         NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
