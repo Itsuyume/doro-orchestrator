@@ -64,9 +64,9 @@ struct SurfaceChecks {
     }
 
     static func checkStatusMotion() {
-        for (time, expected) in [(0.0, 0.0), (1.6, 0.0), (2.6, -26.0), (3.6, -52.0), (4.6, -52.0), (6.2, -26.0), (7.2, 0.0)] {
+        for (time, expected) in [(0.0, 0.0), (1.6, 0.0), (2.6, -26.0), (3.6, -52.0), (4.6, -78.0), (6.2, -119.6), (7.2, -145.6)] {
             let offset = InterfaceMotion.statusOffset(elapsed: time, contentWidth: 152, viewportWidth: 100, reduced: false)
-            precondition(abs(offset - expected) < 0.001, "Long status text must pause at both readable ends and return without jumping")
+            precondition(abs(offset - expected) < 0.001, "Overflowing titles must move left at a constant speed without reversing")
         }
         for (content, viewport) in [(0.0, 100.0), (100.0, 100.0), (50.0, 100.0), (100.0, 0.0), (100.5, 100.0), (102.0, 100.0)] {
             precondition(InterfaceMotion.statusOffset(elapsed: 3, contentWidth: content, viewportWidth: viewport, reduced: false) == 0)
@@ -76,5 +76,17 @@ struct SurfaceChecks {
                      "Status motion starts only beyond the subpixel tolerance")
         precondition(InterfaceMotion.statusOffset(elapsed: 3, contentWidth: 200, viewportWidth: 100, reduced: true) == 0,
                      "Reduce Motion must stop the status text")
+        for content in [102.5, 152.0, 800.0] {
+            let repeatWidth = content + InterfaceMotion.statusGap
+            var previous = InterfaceMotion.statusOffset(elapsed: 1.6, contentWidth: content, viewportWidth: 100, reduced: false)
+            for step in 1...300 {
+                let current = InterfaceMotion.statusOffset(elapsed: 1.6 + Double(step) / 10,
+                    contentWidth: content, viewportWidth: 100, reduced: false)
+                let advance = previous >= current ? previous - current : previous - current + repeatWidth
+                precondition(abs(advance - 2.6) < 0.001,
+                             "Both copies must advance continuously across repeat boundaries, including tiny overflows")
+                previous = current
+            }
+        }
     }
 }

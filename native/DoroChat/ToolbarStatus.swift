@@ -47,7 +47,10 @@ struct ToolbarStatus: View {
 
     @ViewBuilder private func visibleLabel(at date: Date) -> some View {
         if moving {
-            label.fixedSize(horizontal: true, vertical: false)
+            HStack(spacing: InterfaceMotion.statusGap) {
+                label
+                label
+            }.fixedSize(horizontal: true, vertical: false)
                 .offset(x: InterfaceMotion.statusOffset(elapsed: date.timeIntervalSince(started),
                     contentWidth: contentWidth, viewportWidth: viewportWidth, reduced: reducedMotion))
         } else {
