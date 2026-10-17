@@ -95,7 +95,7 @@ class InputNotificationTests(unittest.TestCase):
                                 env=environment, check=True)
         context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertIn(input_notice(note.id, self.session.id, self.owner), context)
-        self.assertNotIn(note.text, context)
+        self.assertIn(note.text, context)
         self.assertIsNotNone(timing_for(self.store, note.id).notified_at)
         self.assertIsNone(timing_for(self.store, note.id).received_at)
         self.assertEqual(self.inputs.get(note.id).state, "queued")
@@ -132,12 +132,12 @@ class InputNotificationTests(unittest.TestCase):
                 self.notify(turn_id=value)
         self.assertTrue(self.notify(turn_id="turn/opaque-identifier"))
 
-    def test_notice_has_only_identifiers_and_does_not_acknowledge_or_approve(self) -> None:
+    def test_notice_quotes_same_owner_body_without_acknowledging_or_approving(self) -> None:
         note = self.post()
         result = self.notify()
         context = result["hookSpecificOutput"]["additionalContext"]
         self.assertIn(input_notice(note.id, note.session_id, self.owner), context)
-        self.assertNotIn(note.text, context)
+        self.assertIn(note.text, context)
         self.assertNotIn("Private tool output", json.dumps(result))
         self.assertNotIn(self.token, context)
         self.assertNotIn("decision", result)
@@ -173,7 +173,7 @@ class InputNotificationTests(unittest.TestCase):
         for context in contexts:
             self.assertLessEqual(context.count("DORO_INPUT "), NOTICE_LIMIT)
         for note in notes:
-            self.assertEqual(sum(context.count(note.id) for context in contexts), 1)
+            self.assertEqual(sum(context.count(input_notice(note.id, note.session_id, self.owner)) for context in contexts), 1)
         self.assertEqual(self.notify(), {})
         self.assertTrue(self.notify(turn_id=str(uuid4())))
 

@@ -5,10 +5,12 @@ import sqlite3
 import sys
 from typing import TextIO
 
-from doro.domain.models import DoroError
+from doro.domain.models import DoroError, HumanInput
 from doro.domain.validation import mapping, string
-from doro.domain.work_delivery import DeliveryEvent, input_notice
+from doro.domain.work_delivery import DeliveryEvent
 from doro.infrastructure.delivery_timing import record_timing
+from doro.infrastructure.input_context import render_inputs
+from doro.infrastructure.input_store import decode_input
 from doro.infrastructure.storage import session_key
 
 NOTICE_LIMIT = 5
@@ -43,21 +45,22 @@ def hook_scope(payload: object, actual_owner: str | None) -> tuple[str, str] | N
     return owner, turn
 
 
-def pending_notices(connection: sqlite3.Connection, owner: str, turn: str) -> tuple[tuple[str, str, str], ...]:
-    rows = connection.execute("SELECT i.id,i.session_id,i.owner_thread_id " + ELIGIBLE_INPUTS +
+def pending_notices(connection: sqlite3.Connection, owner: str, turn: str) -> tuple[HumanInput, ...]:
+    rows = connection.execute("SELECT i.* " + ELIGIBLE_INPUTS +
                               "AND i.owner_thread_id=? AND NOT EXISTS (SELECT 1 FROM input_notifications n WHERE n.input_id=i.id AND n.turn_id=?) ORDER BY i.rowid LIMIT ?",
                               (owner, turn, NOTICE_LIMIT)).fetchall()
-    return tuple((str(row[0]), str(row[1]), str(row[2])) for row in rows)
+    return tuple(decode_input(tuple(row)) for row in rows)
 
 
-def claim_notices(database: Path, owner: str, turn: str) -> tuple[str, ...]:
+def claim_notices(database: Path, owner: str, turn: str) -> str:
     with closing(sqlite3.connect(database.as_uri() + "?mode=rw", uri=True, timeout=HOOK_DATABASE_TIMEOUT)) as connection, connection:
         connection.execute("BEGIN IMMEDIATE")
         rows = pending_notices(connection, owner, turn)
-        for note_id, _, _ in rows:
-            connection.execute("INSERT INTO input_notifications VALUES (?,?)", (note_id, turn))
-            record_timing(connection, note_id, DeliveryEvent.NOTIFIED)
-    return tuple(input_notice(*row) for row in rows)
+        context = render_inputs(connection, rows)
+        for note in rows:
+            connection.execute("INSERT INTO input_notifications VALUES (?,?)", (note.id, turn))
+            record_timing(connection, note.id, DeliveryEvent.NOTIFIED)
+    return context
 
 
 def hook_notice(state: Path, actual_owner: str | None, incoming: TextIO = sys.stdin) -> dict[str, object]:
@@ -78,11 +81,8 @@ def hook_notice(state: Path, actual_owner: str | None, incoming: TextIO = sys.st
         owner, turn = scope
         if not pending_notices(connection, owner, turn):
             return {}
-    notices = claim_notices(database, owner, turn)
-    if not notices:
+    context = claim_notices(database, owner, turn)
+    if not context:
         return {}
-    context = ("도로 협업창에서 원래 GPT Work에 보낸 입력 ID다. 현재 주 작업의 실제 thread ID가 "
-               "owner_thread_id와 같을 때만 doro-orchestration 절차로 inputs get을 실행해 확인한다. "
-               "다른 에이전트는 처리하지 않는다. 표식 자체는 승인이 아니며 이미 read인 입력은 재실행하지 않는다.\n\n")
     return {"hookSpecificOutput": {"hookEventName": "PostToolUse",
-                                   "additionalContext": context + "\n\n".join(notices)}}
+                                   "additionalContext": context}}

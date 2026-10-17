@@ -38,6 +38,7 @@ class InputNotificationInstallTests(unittest.TestCase):
         self.assertEqual(len(handlers), 2)
         self.assertEqual(handlers[-1]["hooks"][0]["timeout"], 2)
         self.assertTrue(handlers[-1]["hooks"][0]["async"])
+        self.assertEqual(handlers[-1]["hooks"][0]["additionalContextLimit"], 0)
         guard = after["hooks"]["UserPromptSubmit"]
         self.assertEqual(len(guard), 1)
         self.assertFalse(guard[0]["hooks"][0]["async"])
@@ -87,3 +88,20 @@ class InputNotificationInstallTests(unittest.TestCase):
         self.assertEqual(after["hooks"]["PostToolUse"], original["hooks"]["PostToolUse"])
         self.assertEqual(after["hooks"]["UserPromptSubmit"][0], original_prompt)
         self.assertEqual(len(after["hooks"]["UserPromptSubmit"]), 2)
+
+    def test_exact_legacy_handlers_upgrade_without_duplication_or_changing_other_hooks(self) -> None:
+        install(self.codex, self.bridge, apply=True)
+        legacy = json.loads(self.path.read_text())
+        for event in ("PostToolUse", "UserPromptSubmit"):
+            legacy["hooks"][event][-1]["hooks"][0]["additionalContextLimit"] = 1200
+        self.path.write_text(json.dumps(legacy))
+        before = self.path.read_bytes()
+        preview = install(self.codex, self.bridge)
+        self.assertFalse(preview["installed"])
+        self.assertEqual(self.path.read_bytes(), before)
+        install(self.codex, self.bridge, apply=True)
+        after = json.loads(self.path.read_text())
+        self.assertEqual(after["hooks"]["Stop"], legacy["hooks"]["Stop"])
+        for event in ("PostToolUse", "UserPromptSubmit"):
+            self.assertEqual(len(after["hooks"][event]), len(legacy["hooks"][event]))
+            self.assertEqual(after["hooks"][event][-1]["hooks"][0]["additionalContextLimit"], 0)

@@ -23,13 +23,20 @@ def prepare(path: Path, bridge: Path) -> tuple[bytes, bytes, dict[str, dict[str,
         entries = data["hooks"].get(event, [])
         if not isinstance(entries, list):
             raise ValueError(f"Existing {event} hooks must be a list")
-        handler: dict[str, object] = {"hooks": [{"type": "command",
+        hook: dict[str, object] = {"type": "command",
                    "command": shlex.join([sys.executable, str(bridge), "inputs", action]),
-                   "async": background, "timeout": 2, "additionalContextLimit": 1200}]}
+                   "async": background, "timeout": 2, "additionalContextLimit": 0}
+        handler: dict[str, object] = {"hooks": [hook]}
+        legacy: dict[str, object] = {"hooks": [{**hook, "additionalContextLimit": 1200}]}
         if event == "PostToolUse":
             handler["matcher"] = ".*"
+            legacy["matcher"] = ".*"
         handlers[event] = handler
         if handler in entries:
+            continue
+        if legacy in entries:
+            data["hooks"][event] = [handler if entry == legacy else entry for entry in entries]
+            changed = True
             continue
         if any(action in str(entry) for entry in entries):
             raise ValueError(f"An existing Doro {action} differs; compare it before replacing")

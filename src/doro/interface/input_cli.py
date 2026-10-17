@@ -19,7 +19,7 @@ from doro.interface.input import read_bounded
 def add_input_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     inputs = commands.add_parser("inputs", help="Read human native-chat messages without model calls or automatic approvals")
     actions = inputs.add_subparsers(dest="input_action", required=True)
-    actions.add_parser("notify-hook", help="Official PostToolUse hook; only owner-bound input IDs")
+    actions.add_parser("notify-hook", help="Official PostToolUse hook; bounded same-owner input context")
     actions.add_parser("guard-hook", help="Official UserPromptSubmit hook; stop handled queue envelopes only")
     pending = actions.add_parser("pending")
     pending.add_argument("session_id")

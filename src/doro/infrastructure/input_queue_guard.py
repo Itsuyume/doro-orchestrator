@@ -8,6 +8,7 @@ from typing import TextIO
 from doro.domain.models import DoroError
 from doro.domain.validation import mapping
 from doro.domain.work_delivery import DeliveryState, parse_input_notice
+from doro.infrastructure.input_context import queued_context
 
 GUARD_INPUT_LIMIT = 1_048_576
 GUARD_DATABASE_TIMEOUT = 0.1
@@ -44,5 +45,9 @@ def guard_notice(state: Path, actual_owner: str | None, incoming: TextIO = sys.s
             "WHERE i.id=? AND i.session_id=? AND i.owner_thread_id=? AND o.thread_id=? "
             "AND i.state='read' AND d.state=?", (note, session, owner, owner, DeliveryState.RECEIVED.value),
         ).fetchone()
-    # No reason/context/warning: handled transport envelopes need no further model reply.
-    return {"continue": False} if handled is not None else {}
+        if handled is not None:
+            return {"continue": False}
+        context = queued_context(connection, note, session, owner)
+    if not context:
+        return {}
+    return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context}}
