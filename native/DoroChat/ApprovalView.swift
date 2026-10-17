@@ -6,47 +6,53 @@ struct ApprovalView: View {
     @State private var details = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                Text(question).font(.system(size: 18, weight: .bold))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(question).font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Button { controller.approvals.dismiss() } label: {
-                    Image(systemName: "xmark").frame(width: 24, height: 24)
-                }.buttonStyle(.plain).help("나중에 · 승인 대기는 유지")
-                    .accessibilityLabel("승인창 닫기 · 결정하지 않음")
+                Button(details ? "상세 접기" : "상세 내용") { details.toggle() }
+                    .buttonStyle(.plain).font(.system(size: 11))
+                    .accessibilityLabel(details ? "승인 요청 상세 접기" : "승인 요청 상세 내용 펼치기")
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(target.approval.brief.isEmpty ? "이 질문에는 짧은 요약이 없어 원문을 보여주도로." : target.approval.brief)
-                        .font(.system(size: 14)).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                    DisclosureGroup("상세 내용", isExpanded: $details) {
-                        Text("작업: " + target.label).font(.system(size: 11)).foregroundStyle(.secondary)
-                        Text(target.approval.details).font(.system(size: 12)).lineSpacing(3)
-                            .textSelection(.enabled).padding(.top, 6)
-                    }.font(.system(size: 12))
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }.contentShape(Rectangle())
-            status
-            HStack(spacing: 8) {
-                Button("나중에") { controller.approvals.dismiss() }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("보류") { controller.submitApproval(.reject, target: target) }
-                    .disabled(!canAnswer)
-                Button("승인") { controller.submitApproval(.approve, target: target) }
-                    .buttonStyle(.borderedProminent).tint(ChatSurface.action)
-                    .foregroundStyle(ChatSurface.actionText).disabled(!canAnswer)
-                    .accessibilityLabel(target.label + " · 질문 " + target.approval.checkpoint_id.prefix(4) + " 승인")
+            if details {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(target.label).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(brief).font(.system(size: 13)).lineSpacing(2)
+                        Text(target.approval.details).font(.system(size: 12)).lineSpacing(2)
+                    }.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                }.frame(height: 110)
+            } else {
+                Text(brief).font(.system(size: 13)).lineSpacing(2).lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
+            HStack(spacing: 10) {
+                if let status { Text(status).font(.system(size: 11)).foregroundStyle(.secondary) }
+                Spacer(minLength: 0)
+                Button("거절") { controller.submitApproval(.reject, target: target) }
+                    .disabled(!canAnswer).accessibilityLabel(target.label + " · 질문 거절")
+                Button { controller.submitApproval(.approve, target: target) } label: {
+                    Text("승인").font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 6)
+                        .foregroundStyle(ChatSurface.actionText)
+                        .background(ChatSurface.action, in: RoundedRectangle(cornerRadius: 8))
+                }.buttonStyle(.plain).disabled(!canAnswer).opacity(canAnswer ? 1 : 0.45)
+                    .accessibilityLabel(target.label + " · 질문 승인")
             }.controlSize(.large)
-        }.padding(18).frame(width: 360, height: 340)
-            .background(ChatSurface.panel, in: RoundedRectangle(cornerRadius: 18))
+        }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
+            .background(ChatSurface.aiBubble, in: RoundedRectangle(cornerRadius: 12))
             .foregroundStyle(.primary)
             .onAppear { details = target.approval.brief.isEmpty }
+            .onChange(of: target.id) { _, _ in details = target.approval.brief.isEmpty }
     }
 
     private var canAnswer: Bool {
         !controller.sending && controller.readError.isEmpty
             && controller.approvals.canSubmit(target, current: controller.conversation)
+    }
+
+    private var brief: String {
+        target.approval.brief.isEmpty ? target.approval.details : target.approval.brief
     }
 
     private var question: String {
@@ -55,19 +61,10 @@ struct ApprovalView: View {
         return "이 방향으로 진행할까도로?"
     }
 
-    private var status: some View {
-        Text(!controller.readError.isEmpty ? controller.readError : controller.approvals.responsePending(target)
-             ? receivedStatus
-             : controller.inputStatus.hasPrefix("전달 확인 실패") ? controller.inputStatus : "이 질문에만 적용되도로.")
-            .font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
-    }
-
-    private var receivedStatus: String {
-        switch controller.approvals.responseDecision(target) {
-        case .approve: return "승인 답변 접수됨 · 도로 확인 대기"
-        case .reject: return "보류 답변 접수됨 · 도로 확인 대기"
-        case nil: return "답변 접수됨 · 도로 확인 대기"
-        }
+    private var status: String? {
+        if !controller.readError.isEmpty { return controller.readError }
+        if controller.sending { return "전달 확인 중" }
+        return controller.inputStatus.hasPrefix("전달 확인 실패") ? controller.inputStatus : nil
     }
 }
 

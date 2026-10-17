@@ -9,7 +9,6 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var expandedSize = NSSize(width: 390, height: 590)
     private var wasCollapsed = false
     private var wasShowingTasks = false
-    private var approvalWindow: ApprovalWindow?
     private var menuBar: MenuBarControl?
     private var panelDragging: PanelDragGesture?
     private var shortcut: GlobalShortcut?
@@ -75,13 +74,11 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 isMenuInteraction: { [weak self] point in self?.menuBar?.contains(screenPoint: point) == true },
                 isMouseClick: { NSEvent.pressedMouseButtons & 3 != 0 })
         } catch { controller.interactionError = error.localizedDescription }
-        approvalWindow = ApprovalWindow(controller: controller)
         controller.onApprovalChange = { [weak self] in
             guard let self else { return }
-            self.approvalWindow?.update(anchor: self.window)
             self.menuBar?.update(approvals: self.controller.approvalCount)
         }
-        controller.onApprovalOpen = { [weak self] in self?.approvalWindow?.focusCurrent() }
+        controller.onApprovalOpen = { [weak self] in self?.window?.makeKeyAndOrderFront(nil) }
         controller.onCollapse = { [weak self] collapsed in self?.resize(collapsed: collapsed) }
         controller.onStackLayout = { [weak self] in
             guard let self else { return }
@@ -123,7 +120,6 @@ final class ChatAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     private func show(_ display: ViewerDisplay) {
         guard let window else { return }
-        approvalWindow?.update(anchor: window)
         if display == .hidden || display == .stop { waitingForMenu = false; window.orderOut(nil); return }
         if !hasReadSnapshot { waitingForSnapshot = true; return }
         if display == .panel, !placeAtMenuBar(resetOffset: true) {

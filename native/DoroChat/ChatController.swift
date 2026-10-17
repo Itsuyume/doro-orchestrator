@@ -43,9 +43,6 @@ final class ChatController: ObservableObject {
     let saveHistory: (StackHistorySnapshot) throws -> Void
     @Published var approvals = ApprovalPresentation() {
         didSet {
-            if oldValue.seen != approvals.seen {
-                UserDefaults(suiteName: "local.doro.approvals")?.set(Array(approvals.seen), forKey: "seen")
-            }
             onApprovalChange?()
         }
     }
@@ -91,7 +88,6 @@ final class ChatController: ObservableObject {
         stacks = StackCatalog(removed: history.removed)
         lastRemoved = history.undo
         selectedSession = state.selectedSession ?? command[command.count - 2]
-        approvals = ApprovalPresentation(seen: Set(UserDefaults(suiteName: "local.doro.approvals")?.stringArray(forKey: "seen") ?? []))
         restoreMemory()
     }
 

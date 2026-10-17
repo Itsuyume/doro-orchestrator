@@ -27,6 +27,8 @@ jobs:
       - run: /tmp/doro-stack-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/ChatModels.swift native/DoroChat/ApprovalPresentation.swift tests/native/ApprovalChecks.swift -o /tmp/doro-approval-check
       - run: /tmp/doro-approval-check
+      - run: xcrun swiftc -swift-version 6 -warnings-as-errors $(find native/DoroChat -name '*.swift' ! -name 'main.swift') tests/native/InlineApprovalControllerChecks.swift -o /tmp/doro-inline-approval-check
+      - run: /tmp/doro-inline-approval-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors native/DoroChat/ChatModels.swift native/DoroChat/SubmissionLedger.swift tests/native/SubmissionChecks.swift -o /tmp/doro-submission-check
       - run: /tmp/doro-submission-check
       - run: xcrun swiftc -swift-version 6 -warnings-as-errors $(find native/DoroChat -name '*.swift' ! -name 'main.swift') tests/native/InteractionChecks.swift -o /tmp/doro-interaction-check

@@ -9,23 +9,24 @@ extension ChatController {
         }
         guard readError.isEmpty else { inputStatus = readError; refresh(); return }
         submit(session: target.sessionID,
-               text: decision == .approve ? "이 스택의 범위 승인해도로" : "이 스택의 범위 보류해도로",
+               text: decision == .approve ? "이 스택의 범위 승인해도로" : "이 스택의 범위 거절해도로",
                checkpoint: target.approval.checkpoint_id, decision: decision)
     }
 
     func synchronizeApproval(_ view: Conversation) {
-        approvals.synchronize(view, automatic: !collapsed && !showingTasks)
-        if requestedApprovalSession == view.session_id {
-            approvals.open(view)
-            requestedApprovalSession = nil
-            onApprovalOpen?()
-        }
+        let visible = display != .hidden && display != .stop && !collapsed && !showingTasks && !showingNewTask
+        approvals.synchronize(view, automatic: visible)
+        let requested = requestedApprovalSession
+        requestedApprovalSession = nil
+        if visible && requested == view.session_id && approvals.presented != nil { onApprovalOpen?() }
     }
 
     func openApproval(_ session: String) {
         guard contexts.contains(where: { $0.id == session && $0.needs_input }) else { return }
         requestedApprovalSession = session
         openContext(session)
-        refresh()
+        if selectedSession != session || showingTasks || collapsed || display == .hidden {
+            requestedApprovalSession = nil
+        }
     }
 }

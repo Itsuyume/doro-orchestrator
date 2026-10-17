@@ -101,6 +101,9 @@ struct ChatView: View {
             else if controller.showingTasks { TaskManager(controller: controller) }
             else if let view = controller.conversation {
                 transcript(view)
+                if let target = controller.approvals.presented, target.sessionID == view.session_id {
+                    ApprovalView(controller: controller, target: target)
+                }
                 OverlayComposer(controller: controller)
             } else if controller.readError.isEmpty {
                 Spacer(); ProgressView("대화를 읽는 중이도로…"); Spacer()
