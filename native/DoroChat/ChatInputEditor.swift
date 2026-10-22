@@ -4,6 +4,26 @@ import SwiftUI
 @MainActor
 final class ComposerTextView: NSTextView {
     var onSubmit: (() -> Void)?
+    private var lastFittedHeight: CGFloat = 34
+
+    func fittingHeight(width: CGFloat) -> CGFloat {
+        guard width > 0, width.isFinite, let font else {
+            return lastFittedHeight
+        }
+        let container = NSTextContainer(containerSize: NSSize(width: max(1, width - textContainerInset.width * 2),
+            height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = textContainer?.lineFragmentPadding ?? 5
+        let layout = NSLayoutManager()
+        layout.addTextContainer(container)
+        let storage = NSTextStorage(attributedString: attributedString())
+        storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        let contentHeight = max(layout.usedRect(for: container).maxY, layout.extraLineFragmentRect.maxY,
+                                layout.defaultLineHeight(for: font))
+        let fitted = min(120, max(34, ceil(contentHeight + textContainerInset.height * 2)))
+        lastFittedHeight = hasMarkedText() ? max(lastFittedHeight, fitted) : fitted
+        return lastFittedHeight
+    }
 
     static func sends(_ event: NSEvent, composing: Bool) -> Bool {
         let modifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
@@ -22,6 +42,7 @@ struct ChatInputEditor: NSViewRepresentable {
     @Binding var text: String
     @Environment(\.isEnabled) private var isEnabled
     var label = "도로에게 보낼 내 메시지"
+    var growsWithText = false
     let onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -60,6 +81,15 @@ struct ChatInputEditor: NSViewRepresentable {
         guard !editor.hasMarkedText(), editor.string != text else { return }
         editor.string = text
         editor.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView scroll: NSScrollView, context: Context) -> CGSize? {
+        guard growsWithText, let width = proposal.width, width > 0, width.isFinite,
+              let editor = scroll.documentView as? ComposerTextView else { return nil }
+        let content = NSScrollView.contentSize(forFrameSize: NSSize(width: width, height: 120),
+            horizontalScrollerClass: nil, verticalScrollerClass: NSScroller.self, borderType: scroll.borderType,
+            controlSize: scroll.verticalScroller?.controlSize ?? .regular, scrollerStyle: scroll.scrollerStyle)
+        return CGSize(width: width, height: editor.fittingHeight(width: content.width))
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {

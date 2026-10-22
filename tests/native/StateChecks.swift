@@ -148,6 +148,23 @@ struct StateChecks {
         precondition(controller.inputProblem("\0") != nil)
     }
 
+    @MainActor static func sendFailure() async throws {
+        let controller = ChatController(command: ["/usr/bin/false", "chat", "A", "--json"])
+        controller.conversation = view("A")
+        controller.capabilities["A"] = "fixture"
+        let draft = String(repeating: "한글 초안 🇰🇷\n", count: 20)
+        controller.inputText = draft
+        controller.submitInput()
+        for _ in 0..<100 {
+            if !controller.sending { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        precondition(!controller.sending && controller.inputText == draft && controller.memories["A"]?.text == draft,
+                     "An external send failure cannot clear a multiline Korean draft")
+        precondition(controller.inputStatus.hasPrefix("전달 확인 실패:") && controller.memories["A"]?.lastInputID != nil,
+                     "Failure stays visible and keeps the same uncertain submission ID")
+    }
+
     @MainActor static func main() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -155,6 +172,7 @@ struct StateChecks {
         try restart(directory)
         try failure(directory)
         try await preSendFailure(directory)
+        try await sendFailure()
         try acknowledgement(directory)
         inputLimits()
         print("State checks passed: private drafts/restart, uncertain IDs, receipt reconciliation, write failure, corrupt/symlink safety, ack retry, Unicode/empty input")

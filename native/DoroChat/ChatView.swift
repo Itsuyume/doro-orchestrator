@@ -16,10 +16,11 @@ struct MessageBubble: View {
                         Text(message.phase).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
                     }
                     Text(verbatim: message.text).font(.system(size: 14)).lineSpacing(3)
-                        .lineLimit(expanded ? nil : 6)
-                    if message.text.count > 180 {
+                        .lineLimit(MessagePreview.lineLimit(message.text, expanded: expanded))
+                    if MessagePreview.canExpand(message.text) {
                         Button(expanded ? "발언 접기" : "전체 발언 펼치기") { expanded.toggle() }
                             .buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
+                            .accessibilityValue(expanded ? "펼쳐짐" : "접힘")
                     }
                     if message.state != "completed" {
                         Text(message.state).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
@@ -145,6 +146,9 @@ struct ChatView: View {
                 }
                 userScrolling = active
             }
+            .overlay(alignment: .bottom) {
+                latestButton(proxy, hasMessages: !view.messages.isEmpty)
+            }
             .onAppear {
                 let target = controller.scrollTarget
                 guard target != view.messages.first?.id else { return }
@@ -160,6 +164,22 @@ struct ChatView: View {
                 if controller.followLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
         }.id(view.session_id)
+    }
+
+    @ViewBuilder private func latestButton(_ proxy: ScrollViewProxy, hasMessages: Bool) -> some View {
+        if !controller.followLatest && hasMessages {
+            Button {
+                controller.returnToLatest()
+                proxy.scrollTo("latest", anchor: .bottom)
+            } label: {
+                Label("최신 답변", systemImage: "arrow.down")
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(ChatSurface.chrome, in: Capsule())
+            }.buttonStyle(.plain).padding(8)
+                .accessibilityLabel("최신 답변으로 이동")
+                .help("맨 아래로 이동하고 새 답변을 따라가기로 전환")
+        }
     }
 
     private var readingPosition: Binding<String?> {

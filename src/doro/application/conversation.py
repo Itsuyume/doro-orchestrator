@@ -9,7 +9,7 @@ def turn_message(index: int, turn: Turn, incoming: str = "") -> ChatMessage:
                        incoming=incoming, main=turn.provider in {"work", "codex"})
 
 
-def exchange_message(index: int, exchange: Exchange) -> ChatMessage:
+def exchange_message(index: int, exchange: Exchange, next_turn: int) -> ChatMessage:
     states = {"running": "응답 생성 중", "failed": "실패한 부분 응답 · 채택하지 않음",
               "interrupted": "중단된 부분 응답 · 채택하지 않음"}
     if exchange.status not in states:
@@ -17,7 +17,9 @@ def exchange_message(index: int, exchange: Exchange) -> ChatMessage:
     text = exchange.output or "아직 받은 응답이 없도로."
     if exchange.error:
         text += "\n\n오류: " + exchange.error
-    return ChatMessage(f"attempt-{index}", SENDERS[exchange.provider], PHASES[exchange.phase],
+    # A running exchange reserves the next turn ID; stored completed/failed IDs do not change.
+    identity = f"turn-{next_turn}" if exchange.status == "running" else f"attempt-{index}"
+    return ChatMessage(identity, SENDERS[exchange.provider], PHASES[exchange.phase],
                        text, states[exchange.status], exchange.input, exchange.provider == "codex")
 
 
@@ -31,11 +33,11 @@ def discussion(session: Session, inputs: tuple[HumanInput, ...] = ()) -> list[Ch
         if matched is None:
             messages.append(turn_message(index, turn))
         else:
-            messages.extend(exchange_message(i, session.exchanges[i]) for i in range(cursor, matched))
+            messages.extend(exchange_message(i, session.exchanges[i], len(session.turns)) for i in range(cursor, matched))
             messages.append(turn_message(index, turn, session.exchanges[matched].input))
             cursor = matched + 1
         messages.extend(inputs_after(inputs, index + 1))
-    messages.extend(exchange_message(i, session.exchanges[i]) for i in range(cursor, len(session.exchanges)))
+    messages.extend(exchange_message(i, session.exchanges[i], len(session.turns)) for i in range(cursor, len(session.exchanges)))
     return messages
 
 

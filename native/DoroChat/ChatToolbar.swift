@@ -15,7 +15,7 @@ struct ChatToolbar: View {
         HStack(spacing: 4) {
             ContextSelector(controller: controller)
             ModelSettingsButton(controller: controller)
-            ToolbarStatus(text: status, active: controller.display != .hidden && !controller.collapsed)
+            ToolbarStatus(text: controller.toolbarStatus, active: controller.display != .hidden && !controller.collapsed)
                 .frame(minWidth: compact ? 48 : 60, maxWidth: .infinity).layoutPriority(-1)
             if controller.approvalCount > 0 {
                 ApprovalEntry(controller: controller, style: compact ? .icon : .count)
@@ -30,9 +30,4 @@ struct ChatToolbar: View {
         }
     }
 
-    private var status: String {
-        if controller.showingNewTask { return "새 작업" }
-        if controller.showingTasks || controller.inputStatus.isEmpty { return controller.currentLabel }
-        return [controller.inputStatus, controller.currentLabel].filter { !$0.isEmpty }.joined(separator: " · ")
-    }
 }

@@ -5,7 +5,7 @@ import unittest
 
 from doro.application.conversation import conversation
 from doro.application.work_bridge import WorkBridge
-from doro.domain.models import DoroError, Exchange
+from doro.domain.models import DoroError, Exchange, Turn
 from doro.domain.validation import parse_task
 from doro.infrastructure.config import load_config
 from doro.infrastructure.storage import LocalStore
@@ -68,5 +68,24 @@ class ConversationTests(unittest.TestCase):
             partial = conversation(self.config, session).messages[-1]
             self.assertEqual(partial.text, "Partial response")
             self.assertEqual(partial.state, "응답 생성 중")
+            self.assertEqual(empty.id, partial.id)
             self.assertEqual(len(session.turns), 1)
             self.assertEqual(session.calls, {})
+
+    def test_completed_stream_retains_its_message_id_after_an_earlier_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            session = WorkBridge(self.config, LocalStore(Path(tmp)), ExternalRunner(), lambda _: None).start(self.task, "Draft")
+            failed = Exchange("claude", "review", "Earlier input", "Partial failure", status="failed")
+            running = Exchange("claude", "review", "Exact input", "Partial response")
+            session = replace(session, status="running", exchanges=[failed, running])
+            before = conversation(self.config, session).messages
+            running.output += " completed"
+            running.status = "completed"
+            session.turns.append(Turn("claude", "review", running.output, 0, None, ""))
+            session.status = "awaiting_work"
+            after = conversation(self.config, session).messages
+            self.assertEqual(after[-1].id, before[-1].id, "Completion cannot reset the expanded bubble or its reading anchor")
+            self.assertEqual(after[-2].id, before[-2].id, "Stored failed attempts keep their existing identity")
+            self.assertEqual(after[-1].id, "turn-1", "Existing completed-turn identities stay compatible")
+            self.assertEqual(len({message.id for message in after}), len(after))
+            self.assertEqual(after[-1].text, running.output)
