@@ -167,7 +167,7 @@ struct TaskListChecks {
 
     @MainActor static func checkOutsideCollapse() throws {
         let controller = ChatController(command: ["/usr/bin/false", "chat", "A", "--json"])
-        let focus = try OutsideCollapse(controller: controller)
+        let focus = try OutsideCollapse(controller: controller, isMenuInteraction: { _ in false }, isMouseClick: { true })
         defer { focus.stop() }
         controller.display = .panel
         controller.inputText = "Preserve draft"

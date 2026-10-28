@@ -25,6 +25,17 @@ extension ChatController {
         return rows.first { !isInProgress($0) }?.id
     }
 
+    var toolbarStatus: String {
+        if showingNewTask { return "새 작업" }
+        if showingTasks { return "대화 \(listedContexts.count)개" }
+        return [inputStatus, currentLabel].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    func returnToLatest() {
+        scrollTarget = nil
+        followLatest = true
+    }
+
     func openContext(_ id: String) {
         guard contexts.contains(where: { $0.id == id }) else { return }
         guard switchSession(id, openingStack: true) else { return }
