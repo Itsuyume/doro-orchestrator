@@ -25,7 +25,9 @@ def add_work_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser
     start.add_argument("--label", default="도로 협업")
     start.add_argument("--scope", type=Path)
     start.add_argument("--brief", type=Path, help="Short approval scope, at most 280 characters")
-    start.add_argument("--bounded", action="store_true", help="Opt into legacy local interaction/cost ceilings")
+    limits = start.add_mutually_exclusive_group()
+    limits.add_argument("--bounded", action="store_true", help="Use configured interaction/cost ceilings (default)")
+    limits.add_argument("--until-quota", action="store_true", help="Explicit override of cumulative local budgets")
     for name in ("review", "reply", "finish", "status", "checkpoint", "decide", "bind", "cancel", "retry", "limits"):
         action = actions.add_parser(name)
         action.add_argument("session_id")
@@ -65,7 +67,7 @@ def start_work(args: argparse.Namespace, config: Config, bridge: WorkBridge, sto
         validate_owner(args.owner_thread, args.label)
     session = bridge.start(load_task(config, args.task),
                            read_bounded(args.draft, config.limits.max_response_chars),
-                           read_bounded(args.scope, 6000) if args.scope else "", until_quota=not args.bounded,
+                           read_bounded(args.scope, 6000) if args.scope else "", until_quota=args.until_quota,
                            brief=read_bounded(args.brief, 280) if args.brief else "")
     if args.owner_thread:
         store.bind(OwnerRoute(session.id, args.owner_thread, args.label))

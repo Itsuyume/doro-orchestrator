@@ -9,12 +9,18 @@ PHASES = {
               "Go beyond criticism of the draft. Explain benefits, tradeoffs, assumptions and a small check "
               "for promising ideas; label speculation. "
               "Use a bounded partial review where helpful; GPT decides what to adopt."),
-    "review": ("Review GPT's solution for specific objections, failure paths, edge cases and improvements. "
-               "Also propose diverse, concise new ideas and alternatives beyond defect correction; no fixed idea count."),
+    "review": ("Independently analyze the public task, evidence, assumptions and counterexamples before evaluating "
+               "GPT's position. If history contains only a scope brief, propose an approach before GPT drafts; "
+               "do not assume a solution exists. Cover document arguments, Obsidian user workflows, learning-module "
+               "coverage and misconceptions, research design or implementation as relevant. Give concrete alternatives "
+               "and checks for material objections. No fixed idea count. GPT retains final judgment, including all "
+               "mathematical and security claims; distinguish hypotheses from verified evidence."),
     "rebuttal": ("Evaluate material ideas and review objections. Accept or adapt useful changes; "
                  "explain deferred or rejected suggestions. Improve the work without forcing adoption."),
-    "recheck": ("Check GPT's rebuttal and revised work. Report remaining material issues or explicit agreement. "
-                "Add distinct new ideas when they offer value, without repeating earlier suggestions."),
+    "recheck": ("Address GPT's material objections and revisions directly. Defend, amend or withdraw your earlier "
+                "claims with reasons, counterexamples and concrete implementation or validation proposals. Identify "
+                "remaining disagreements; do not agree by default or repeat settled points. GPT alone makes the "
+                "final judgment, and unverified mathematical or security claims remain unverified."),
     "final": ("Make the final judgment. Deliver the solution and reasons for material idea/review decisions. "
               "Distinguish proposals, implemented changes, verified results and unverified limits."),
 }

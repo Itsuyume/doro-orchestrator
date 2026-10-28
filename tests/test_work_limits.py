@@ -27,8 +27,26 @@ class WorkLimitsTests(unittest.TestCase):
         self.bridge = WorkBridge(self.config, self.store, self.runner, lambda _: None)
         self.task = parse_task({**public_task(), "allowed_providers": ["claude"]})
 
-    def test_default_work_has_no_successful_review_or_cumulative_call_ceiling(self) -> None:
-        session = self.bridge.start(self.task, "Public draft")
+    def test_default_work_stops_at_budget_before_a_second_external_call(self) -> None:
+        config = replace(self.config, limits=replace(self.config.limits, max_tokens=100))
+        bridge = WorkBridge(config, self.store, self.runner, lambda _: None)
+        session = bridge.start(self.task, "Public scope before independent analysis")
+        self.assertFalse(session.retry_until_quota)
+        with self.assertRaises(DoroError):
+            bridge.review(session.id)
+        self.assertEqual(self.runner.prompts, [])
+        bridge.decide(session.id, session.checkpoints[-1].id, "approve")
+        bridge.review(session.id)
+        bridge.reply(session.id, "GPT addresses the independent analysis")
+        with self.assertRaisesRegex(DoroError, "Session call limit"):
+            bridge.review(session.id)
+        result = self.store.load(session.id)
+        self.assertEqual((result.status, result.calls, len(result.exchanges)), ("failed", {"claude": 1}, 1))
+        self.assertEqual(len(self.runner.prompts), 1)
+        self.assertEqual(progress(config, result)["call_limit"], 1)
+
+    def test_explicit_until_quota_preserves_the_legacy_override(self) -> None:
+        session = self.bridge.start(self.task, "Public draft", until_quota=True)
         self.assertTrue(session.retry_until_quota)
         with self.assertRaises(DoroError):
             self.bridge.review(session.id)
@@ -65,7 +83,7 @@ class WorkLimitsTests(unittest.TestCase):
 
     def test_unbounded_mode_still_stops_sensitive_external_output(self) -> None:
         self.runner.sensitive = True
-        session = self.bridge.start(self.task, "Public draft")
+        session = self.bridge.start(self.task, "Public draft", until_quota=True)
         self.bridge.decide(session.id, session.checkpoints[-1].id, "approve")
         with self.assertRaisesRegex(DoroError, "Sensitive"):
             self.bridge.review(session.id)

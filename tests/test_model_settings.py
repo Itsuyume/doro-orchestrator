@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -40,6 +41,8 @@ class ModelSettingsTests(unittest.TestCase):
         self.assertEqual(command[command.index("--model") + 1], "claude-opus-5-5")
         self.assertEqual(command[command.index("--effort") + 1], "medium")
         self.assertEqual(command[command.index("--tools") + 1], "")
+        self.assertEqual(json.loads(command[command.index("--settings") + 1]),
+                         {"disableAllHooks": True, "fallbackModel": [], "availableModels": ["claude-opus-5-5"]})
         self.assertEqual(resolved.fingerprint, f.config.fingerprint)
         self.assertEqual(resolved.providers["agy"], f.config.providers["agy"])
         runner = SelectedAdvisorRunner(f.config, self.settings, f.session.id)

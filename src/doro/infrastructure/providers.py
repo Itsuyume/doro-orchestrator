@@ -35,11 +35,14 @@ def build_command(config: Config, name: str) -> list[str]:
             argv += ["-c", f'model_reasoning_effort="{provider.effort}"']
         argv += ["-"]
     elif name == "claude":
+        settings: dict[str, object] = {"disableAllHooks": True, "fallbackModel": []}
+        if provider.model:
+            settings["availableModels"] = [provider.model]
         argv += ["--print", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                  "--safe-mode", "--restricted", "--tools", "",
                  "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                  "--permission-mode", "dontAsk", "--permission-prompts", "none",
-                 "--settings", '{"disableAllHooks":true}', "--disable-slash-commands",
+                 "--settings", json.dumps(settings), "--disable-slash-commands",
                  "--no-chrome", "--no-session-persistence", "--max-turns", "1",
                  "--max-budget-usd", str(config.limits.claude_call_usd)]
         if provider.effort:

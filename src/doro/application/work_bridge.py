@@ -18,7 +18,7 @@ class WorkBridge:
         self.executor = TurnExecutor(config, store, runner, notify)
         self.check_ready = check_ready
 
-    def start(self, task: Task, draft: str, scope: str = "", *, until_quota: bool = True, brief: str = "") -> Session:
+    def start(self, task: Task, draft: str, scope: str = "", *, until_quota: bool = False, brief: str = "") -> Session:
         if "agy" in task.allowed_providers and not self.config.providers["agy"].enabled:
             raise DoroError("AGY is disabled; no input scope was expanded")
         participants = ("work", "claude", "agy") if "agy" in task.allowed_providers else ("work", "claude")
